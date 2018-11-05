@@ -1,0 +1,32 @@
+{
+  "name": "jnr",
+  "version": "0.1.1",
+  "description": "jnr is a templating system",
+  "main": "jnr.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loksland/jnr.git"
+  },
+  "keywords": [
+    "template",
+    "templating",
+    "inject",
+    "data",
+    "substitution",
+    "render",
+    "engine"
+  ],
+  "author": "loksland",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/loksland/jnr/issues"
+  },
+  "homepage": "https://github.com/loksland/jnr#readme",
+  "dependencies": {
+    "js-yaml": "^3.12.0",
+    "moment": "^2.22.2"
+  }
+}
