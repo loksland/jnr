@@ -78,13 +78,21 @@ var result = jnr.apply(template, data);
 ```
 *result: `Is is sunny`*
 
-**Conditional if/else** `{{if expBool}}{{else}}{{/if}}`  
+**Conditional else** `{{if expBool}}{{else}}{{/if}}`  
 ```node
 var data = {weather:{isSunny:true}};
 var template = 'Is is currently {{if weather.isSunny}}sunny{{else}}overcast{{/if}}';
 var result = jnr.apply(template, data);
 ```
 *result: `Is is currently sunny`*
+
+**Conditional elseif** `{{if expBoolA}}{{elseif expBoolB}}{{else}}{{/if}}`  
+```node
+var data = {weather:{isRainy:true,isSunny:false,isChilly:false}};
+var template = 'The weather is {{if weather.isSunny}}sunny{{elseif weather.isRainy}}rainy{{elseif weather.isChilly}}cold{{else}}no weather info{{/if}}';
+var result = jnr.apply(template, data);
+```
+*result: `The weather is rainy`*
 
 **Conditional optional** `{{if exp?}}{{else}}{{/if}}`  
 ```node
@@ -186,7 +194,15 @@ var template = '{{each animals as animal,sound}}{{animal}}s go {{sound}}, {{/eac
 var result = jnr.apply(template, data);
 ```
 *result: `dogs go woof, cats go meow, birds go tweet, `*
-### Working with arrays
+
+**Object loop with props and index** `{{each exps as index,prop,exp}}{{/each}}`  
+```node
+var data = {animals:{dog:'woof',cat:'meow',bird:'tweet'}};
+var template = '{{each animals as index,animal,sound}}({{index}}){{animal}}s go {{sound}}{{/each}}';
+var result = jnr.apply(template, data);
+```
+*result: `(0)dogs go woof(1)cats go meow(2)birds go tweet`*
+### Working with arrays and objects
 
 **Array length** `{{arrExp.length}}`  
 ```node
@@ -211,6 +227,103 @@ var template = '#1 is {{names[0]}}';
 var result = jnr.apply(template, data);
 ```
 *result: `#1 is Fred`*
+
+**Nice array output**  
+```node
+var data = {names:['Fred','Barney','Wilma']};
+var template = '{{each names as index,name}}{{name}}{{if index==names.length-2}} and {{elseif index<names.length-1}}, {{/if}}{{/each}}.';
+var result = jnr.apply(template, data);
+```
+*result: `Fred, Barney and Wilma.`*
+### Filters
+A filter is a function that modifies the data sent to it. Eg. `{{expression(filter)}}`.  
+Filters are applied according to the type of data sent to it.
+
+**Int - $currency** `{{centsExp($currency)}}`  
+```node
+var data = {cents:1012344};
+var template = '{{cents}} cents is {{cents($currency)}}';
+var result = jnr.apply(template, data);
+```
+*result: `1012344 cents is $10,123.44`*
+
+**Date - readable** `{{dateExp(readable)}}`  
+```node
+var data = {now:new Date()};
+var template = 'It is {{now(readable)}}';
+var result = jnr.apply(template, data);
+```
+*result: `It is November 6th 2018, 1:19:20pm`*
+
+**Chaining filters** `{{dateExp(filter1,filter2,etc)}}`  
+```node
+var data = {msg:'Green eggs and ham'};
+var template = '{{msg(uppercase,hyphenate)}}';
+var result = jnr.apply(template, data);
+```
+*result: `GREEN-EGGS-AND-HAM`*
+
+**Registering a filter** `jnr.registerFilter(dataType, filterName, filterFunction)`  
+|dataType| must be one of (`*`,`int`,`float`,`str`,`date`,`obj`,`arr`)  
+Wildcard `*` filters will be applied to any data and take precedence to other filters of the same name.
+ The return datatype does not have to match the incoming.
+```node
+jnr.registerFilter('int', 'x1000', function(int){
+  return int*1000;
+});
+var data = {hiscore:123};
+var template = 'Result is {{hiscore(x1000)}}';
+var result = jnr.apply(template, data);
+```
+*result: `Result is 123000`*
+
+**Registering a wildcard filter**  
+```node
+jnr.registerFilter('*', 'toString', function(anyValue){
+  return String(anyValue);
+});
+
+jnr.registerFilter('str', 'spaced', function(str){
+  return str.split('').join(' ');
+});
+
+var data = {hiscore:123456789};
+var template = 'Score is {{hiscore(toString,spaced)}}';
+var result = jnr.apply(template, data);
+```
+*result: `Score is 1 2 3 4 5 6 7 8 9`*
+
+**Example array filter**  
+```node
+jnr.registerFilter('arr', 'oxfordComma', function(arr){
+  var clone = arr.slice(0);
+  if (clone.length > 1){
+    clone[clone.length-1] = 'and ' + clone[clone.length-1];
+  }
+  return clone.join(', ');
+});
+
+var data = {names:['Fred','Barney','Wilma']};
+var template = '{{names(oxfordComma)}}';
+var result = jnr.apply(template, data);
+```
+*result: `Fred, Barney, and Wilma`*
+
+**Example object filter**  
+```node
+jnr.registerFilter('obj', 'readable', function(obj){
+  return JSON.stringify(obj, null, 2);
+});
+
+var data = {animals:{dog:'woof',cat:'meow',bird:'tweet'}};
+var template = '{{animals(readable)}}';
+var result = jnr.apply(template, data);
+```
+*result: `{
+  "dog": "woof",
+  "cat": "meow",
+  "bird": "tweet"
+}`*
 ### Other features
 
 **Custom tags** `jnr.setTags(openingTag,closingTag)`  
@@ -223,6 +336,8 @@ var result = jnr.apply(template, data);
 *result: `Hello darkness my old friend`*<!--/readme-->
 
 ### Release history
-
+- v0.1.4 - `registerFilter()` added with new datatypes `*`, `arr` and `obj`
+- v0.1.3 - `elseif` added
+- v0.1.2 - More documentation, added index access `[]`, mixed numeric and constant eval
 - v0.1.1 - Added some basic documentation
 - v0.1.0 - Initial release

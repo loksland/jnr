@@ -17,8 +17,6 @@ var TPL_TAG_CLOSE_REGSAFE = escapeRegex(TPL_TAG_CLOSE);
 
 function Jnr(){
 
-
-
 }
 
 Jnr.apply = function(obj, data){
@@ -34,10 +32,7 @@ Jnr.setTags = function(tagOpen, tagClose){
 	TPL_TAG_OPEN_REGSAFE = escapeRegex(TPL_TAG_OPEN);
 	TPL_TAG_CLOSE_REGSAFE = escapeRegex(TPL_TAG_CLOSE);
 
-	// escapeRegex
-
 }
-
 
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 
@@ -117,10 +112,7 @@ function applyTemplateString(str, data){
 			block.type = LOGIC_BLOCK_TYPE_LOOP;
 
 			block.loopSubject = m[1];
-
-
 			var aliasInfoParts = m[2].split(',');
-
 
 			if (aliasInfoParts.length == 1){
 				block.loopPropValAlias = aliasInfoParts[0];
@@ -158,9 +150,36 @@ function applyTemplateString(str, data){
 			var block = {};
 			block.type = LOGIC_BLOCK_TYPE_CONDITIONAL;
 
-			block.condExp = m[1];
-			block.condContent1 = m[2];
-			block.condContent0 = m[3];
+			block.condExps = [m[1]]; // First if () conditional
+			block.condContents = [m[2]]; // The rest, inc `elseif`, parsed below
+			block.condContentElse = m[3]; // else () contents
+
+			// elseif parsing
+			// -------------
+
+			// Look for elseif in m[2]
+			if (m[2].toLowerCase().split('elseif').length > 1) {
+
+				block.condContents = [];
+
+				var elseIfRegex = /(.+?){{elseif ([^{{}}]+)}}/gmi;
+				var mm;
+
+				var lastIndex = 0;
+				while ((mm = elseIfRegex.exec(m[2])) !== null) {
+
+				    if (mm.index === regex.lastIndex) {
+				        elseIfRegex.lastIndex++;
+				    }
+
+						lastIndex = mm.index + mm[0].length;
+						block.condContents.push(mm[1]) // Last cond's content
+						block.condExps.push(mm[2]) // Next cond expression
+				}
+
+				block.condContents.push(m[2].substr(lastIndex, m[2].length-lastIndex)) // Last cond's content is the remainder
+
+			}
 
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
@@ -195,17 +214,19 @@ function applyTemplateString(str, data){
 
 				if (block.type == LOGIC_BLOCK_TYPE_CONDITIONAL){
 
-					//val = evalExpressionAsBool(block.condExp, data) ? block.condContent1 : );
-
 					var conditionalExp;
-					var conditionalResult = parseTemplateExpression(block.condExp, data, true); // resolveOptionalsToBoolean = true
+					for (var i = 0; i < block.condExps.length; i++){ // Look for first true conditional expression
+						var conditionalResult = parseTemplateExpression(block.condExps[i], data, true); // resolveOptionalsToBoolean = true
+						if (conditionalResult === true){
+							conditionalExp = block.condContents[i]; // Found
+							break;
+						} else if (conditionalResult !== false){
+							throw new Error('Conditional subject must resolve to a bool, exp `' + block.condExp+'` resolved to `'+conditionalResult+'`, (type:'+typeof conditionalResult+')');
+						}
+					}
 
-					if (conditionalResult === true){
-						conditionalExp = block.condContent1
-					} else if (conditionalResult === false){
-						conditionalExp = (block.condContent0 == null) ? '' : block.condContent0
-					} else {
-						throw new Error('Conditional subject must resolve to a bool, exp `' + block.condExp+'` resolved to `'+conditionalResult+'`, (type:'+typeof conditionalResult+')');
+					if (conditionalExp == undefined) { // No true conditions found
+						conditionalExp = (block.condContentElse == null) ? '' : block.condContentElse
 					}
 
 					val = applyTemplateString(conditionalExp, data);
@@ -429,8 +450,47 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 		}
 
 		// See if prop is set
-		console.log('get obj path', data, prop);
 		result = isLiteral ? result : getObjPath(data, prop);
+
+		if (result == undefined){
+
+			// Resolve `inline` numerical expressions and try to eval them
+
+			var mk;
+			var possiblePropMatchRegex =  new RegExp(/([^0-9^ /*+-]+[^ /*+-]*)/img); // Look for prop names (false positive ok)
+			var potentialInlineExps = [];
+			var propParts = [];
+			var propIndex = 0;
+			var isNumericRegex = RegExp(/[+-/ *0-9.]+/im);
+			while ((mk = possiblePropMatchRegex.exec(prop)) !== null) {
+			    if (mk.index === possiblePropMatchRegex.lastIndex) {
+			        regex.lastIndex++;
+			    }
+					if (mk.index > propIndex) {
+						propParts.push(prop.substr(propIndex, mk.index));
+					}
+					propIndex = mk.index + mk[1].length;
+					var _result = getObjPath(data, mk[1]); // Attempt to resolve the prop
+					if (_result != undefined && !isObj(_result) && isNumericRegex.test(_result)) {
+						propParts.push(String(_result))
+					} else {
+						propParts.push(prop.substr(mk.index, propIndex));
+					}
+			}
+			if (prop.length > propIndex) {
+				propParts.push(prop.substr(propIndex, prop.length));
+			}
+
+			var ml;
+			var isLiteral = false;
+			if ((ml = new RegExp(/(?:^'(.*)'$)|(?:^([+-/ *0-9.]+)$)|(^true$)|(^false$)/im).exec(propParts.join(''))) !== null) {
+				if (ml[2] != null){
+					// Numeric expressions
+					result = eval(ml[2]);
+				}
+			}
+
+		}
 
 		if (result != undefined){
 
@@ -486,6 +546,24 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 // -------
 
 var FILTERS = {};
+FILTERS['*'] = {};
+
+FILTERS.arr = {};
+
+FILTERS.arr.verbalList = function(arr){
+  var result = [];
+  for (var i = 0; i < arr.length; i++){
+    if (i > 0){
+      result.push(i == arr.length-1 ? ' and ' : ', ');
+    }
+    result.push(arr[i])
+  }
+  return result.join('');
+};
+
+
+FILTERS.obj = {};
+
 FILTERS.str = {};
 // Lowercase, replace spacing with hyphens.
 FILTERS.str.slugify = function(str){
@@ -502,6 +580,10 @@ FILTERS.str.phoneAuHref = function(str){
 
 FILTERS.str.nbsp = function(str){
 	return str.replace(new RegExp(/\s+/igm), '&nbsp;');
+}
+
+FILTERS.str.uppercase = function(str){
+	return str.toUpperCase();
 }
 
 FILTERS.str.hyphenate = function(str){
@@ -577,12 +659,31 @@ FILTERS.date.readable = function(date){
 }
 
 
+// |dataType| options are 'date','str','float','int'
+// Will overwrite existing
+Jnr.registerFilter = function(dataType, filterName, filterFn) {
+
+	if (!FILTERS[dataType]) {
+		throw new Error('Data type `'+dataType+'` not found.')
+	}
+	FILTERS[dataType][filterName] = filterFn;
+
+}
+
 
 function applyFilter(obj, filterName){
 
+	// Any type filters get precedence
+	var filterFn = getObjPath(FILTERS, '*.'+filterName);
+	if (typeof filterFn == 'function'){
+		return filterFn(obj);
+	}
+
 	var typeKey = '';
 
-	if (typeof obj == 'object' && typeof obj.getMonth === 'function') {
+	if (Array.isArray(obj)) {
+		typeKey = 'arr';
+	} else if (typeof obj == 'object' && typeof obj.getMonth === 'function') {
 		typeKey = 'date';
 	} else if (typeof obj == 'string'){
 
@@ -606,9 +707,11 @@ function applyFilter(obj, filterName){
 		} else {
 			typeKey = 'int';
 		}
+	} else if (typeof obj == 'object'){
+		typeKey = 'obj';
 	}
 
-	if (typeKey.length == 0){
+	if (typeKey.length == 0){ // Type not found
 		return obj;
 	}
 

@@ -216,6 +216,14 @@ data: data,
 eq: 'Is is sunny'
 })
 
+var data = {id: false, age: 20};
+runTest({
+ttl:'Conditional elseif',
+exp: '{{if id}}ID check{{elseif age>=18}}Welcome{{else}}No entry{{/if}}',
+data: data,
+eq: 'Welcome'
+})
+
 var data = {isSunny: false};
 runTest({
 ttl:'Conditional else alt',
