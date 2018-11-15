@@ -253,7 +253,7 @@ var data = {now:new Date()};
 var template = 'It is {{now(readable)}}';
 var result = jnr.apply(template, data);
 ```
-*result: `It is November 6th 2018, 1:19:20pm`*
+*result: `It is November 7th 2018, 3:00:35pm`*
 
 **Chaining filters** `{{dateExp(filter1,filter2,etc)}}`  
 ```node
