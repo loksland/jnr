@@ -1,7 +1,6 @@
 # jnr
 
-jnr is a simple templating engine with some neat features.
-
+A simple and powerful templating system supporting conditional logic, optional chaining, nested data sources, non string templates, ternary operators, looping control flow and custom processing functions.
 
 Install jnr
 -----------
@@ -336,6 +335,7 @@ var result = jnr.apply(template, data);
 *result: `Hello darkness my old friend`*<!--/readme-->
 
 ### Release history
+- v0.1.5 - Improved documentation
 - v0.1.4 - `registerFilter()` added with new datatypes `*`, `arr` and `obj`
 - v0.1.3 - `elseif` added
 - v0.1.2 - More documentation, added index access `[]`, mixed numeric and constant eval

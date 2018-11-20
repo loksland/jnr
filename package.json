@@ -1,7 +1,7 @@
 {
   "name": "jnr",
-  "version": "0.1.4",
-  "description": "jnr is a simple templating engine with some neat features",
+  "version": "0.1.5",
+  "description": "A simple and powerful templating system supporting conditional logic, optional chaining, nested data sources, non string templates, ternary operators, looping control flow and custom processing functions.",
   "main": "jnr.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -14,10 +14,10 @@
     "template",
     "templating",
     "inject",
-    "data",
-    "substitution",
-    "render",
-    "engine"
+    "engine",
+    "system",
+    "optional",
+    "ternary"
   ],
   "author": "loksland",
   "license": "MIT",
