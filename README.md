@@ -252,7 +252,7 @@ var data = {now:new Date()};
 var template = 'It is {{now(readable)}}';
 var result = jnr.apply(template, data);
 ```
-*result: `It is November 7th 2018, 3:00:35pm`*
+*result: `It is September 20th 2019, 4:40:22pm`*
 
 **Chaining filters** `{{dateExp(filter1,filter2,etc)}}`  
 ```node
@@ -335,6 +335,7 @@ var result = jnr.apply(template, data);
 *result: `Hello darkness my old friend`*<!--/readme-->
 
 ### Release history
+- v0.1.6 - Updated dependencies
 - v0.1.5 - Improved documentation
 - v0.1.4 - `registerFilter()` added with new datatypes `*`, `arr` and `obj`
 - v0.1.3 - `elseif` added
