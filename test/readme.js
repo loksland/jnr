@@ -22,7 +22,7 @@ data: {cereal:'corn flake', vehicle:'van'}
 })
 
 output += codeblock({
-ttl:'Nested data source',
+ttl:'Nested data source with dot notation',
 exp: 'Add some {{recipes.fav.ingredient}}, slap it in the oven, you got yourself a {{recipes.fav.name}}, baby.',
 data: {recipes:{fav:{name:'cake', ingredient:'water'}}}
 })
@@ -191,14 +191,14 @@ output += h3('Working with arrays and objects');
 output += codeblock({
 ttl:'Array length',
 abstract: '{{arrExp.length}}',
-exp: '{{if names.length==3}}Three\'s a crowd{{/if}}',
+exp: '{{if names.length==3}}Three is a crowd{{/if}}',
 data:{names:['Fred','Barney','Wilma']}
 })
 
 output += codeblock({
 ttl:'Object length',
 abstract: '{{objExp.length}}',
-exp: '{{if animals.length==3}}Three\'s a crowd{{/if}}',
+exp: '{{if animals.length==3}}Three is a crowd{{/if}}',
 data: {animals:{dog:'woof',cat:'meow',bird:'tweet'}}
 })
 
@@ -379,14 +379,14 @@ function codeblock(config){
   }
 
   if (config.dataDisplay){
-    md += '\nvar data = ' + config.dataDisplay;
+    md += '\nvar content = ' + config.dataDisplay;
   } else {
-    md += '\nvar data = ' + stringify(config.data) + ';';
+    md += '\nvar content = ' + stringify(config.data) + ';';
   }
-  md += '\nvar template = ' + stringify(config.exp) + ';';
-  md += '\nvar result = jnr.apply(template, data);';
+  md += '\nvar view = ' + stringify(config.exp) + ';';
+  md += '\nvar result = jnr.render(template, data);';
   md += '\n```';
-  var result = jnr.apply(config.exp, config.data)
+  var result = jnr.render(config.exp, config.data)
   md += '\n*result: `'+ stringify(result, true) +'`*'
 
   return md;

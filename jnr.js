@@ -19,7 +19,7 @@ function Jnr(){
 
 }
 
-Jnr.apply = function(obj, data){
+Jnr.apply = Jnr.render = function(obj, data){
 	return applyTemplate(obj, data);
 }
 
