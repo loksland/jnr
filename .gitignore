@@ -61,4 +61,5 @@ typings/
 .next
 
 .DS_Store
-
+.webloc
+Whitespace control – Liquid template language.webloc
