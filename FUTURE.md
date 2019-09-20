@@ -1,8 +1,16 @@
 
 
-registerDataType()
 
-registerFilter(datatypeID)
+### Express compatibility
+
+More here:
+https://expressjs.com/en/guide/using-template-engines.html
+
+See `exports.__express` function here:
+https://github.com/pugjs/pug/blob/master/packages/pug/lib/index.js
+https://github.com/gsf/whiskers.js/blob/master/lib/__express.js
+
+### Caching
 
 ###Filter blocks
 
@@ -17,7 +25,7 @@ Donec finibus lectus leo, eu elementum felis iaculis nec. Fusce ut orci urna. Cu
 
 ```
 
-### File in
+### File in?
 
 ```
 jnr.addFileDir('./docs/')

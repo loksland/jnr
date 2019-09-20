@@ -19,8 +19,8 @@ function Jnr(){
 
 }
 
-Jnr.apply = Jnr.render = function(obj, data){
-	return applyTemplate(obj, data);
+Jnr.render = Jnr.apply = function(obj, data){
+	return renderTemplate(obj, data);
 }
 
 // Can be the same char
@@ -39,7 +39,7 @@ Jnr.setTags = function(tagOpen, tagClose){
 // Template
 // --------
 
-function applyTemplate(obj, data){
+function renderTemplate(obj, data){
 
 	// Apply recursively
 
@@ -48,7 +48,7 @@ function applyTemplate(obj, data){
 		obj = dupe(obj);
 
 		for (var p in obj){
-			obj[p] = applyTemplate(obj[p], data);
+			obj[p] = renderTemplate(obj[p], data);
 		}
 
 	} else if (Array.isArray(obj)){
@@ -56,7 +56,7 @@ function applyTemplate(obj, data){
 		obj = obj.slice()
 
 		for (var i = 0 ; i < obj.length; i++){
-			obj[i] = applyTemplate(obj[i], data);
+			obj[i] = renderTemplate(obj[i], data);
 		}
 
 	} else if (typeof obj !== 'string'){
@@ -71,7 +71,7 @@ function applyTemplate(obj, data){
 	var str = obj;
 	while (keepLooping){
 		var strPreApply = str;
-		str = applyTemplateString(strPreApply, data);
+		str = renderTemplateString(strPreApply, data);
 		keepLooping = str != strPreApply;
 	}
 
@@ -86,7 +86,7 @@ function applyTemplate(obj, data){
 var LOGIC_BLOCK_TYPE_LOOP = 'loop';
 var LOGIC_BLOCK_TYPE_CONDITIONAL = 'cond';
 
-function applyTemplateString(str, data){
+function renderTemplateString(str, data){
 
 	if (data._logic_blocks == undefined){
 		data._logic_blocks = [];
@@ -189,7 +189,7 @@ function applyTemplateString(str, data){
 	}
 
 	if (str != preStr){
-		return applyTemplateString(str, data);
+		return renderTemplateString(str, data);
 	}
 
 	// Individual expressions to be resolved
@@ -229,7 +229,7 @@ function applyTemplateString(str, data){
 						conditionalExp = (block.condContentElse == null) ? '' : block.condContentElse
 					}
 
-					val = applyTemplateString(conditionalExp, data);
+					val = renderTemplateString(conditionalExp, data);
 
 				} else if (block.type == LOGIC_BLOCK_TYPE_LOOP){
 
@@ -266,7 +266,7 @@ function applyTemplateString(str, data){
 							if (keyAliasSet){
 								data[block.loopPropKeyAlias] = i;
 							}
-							val += applyTemplateString(block.loopContent, data);
+							val += renderTemplateString(block.loopContent, data);
 
 							delete data[block.loopPropValAlias];
 
@@ -289,7 +289,7 @@ function applyTemplateString(str, data){
 								data[block.loopPropObjIndexAlias] = propIndex;
 							}
 
-							val += applyTemplateString(block.loopContent, data);
+							val += renderTemplateString(block.loopContent, data);
 
 							delete data[block.loopPropValAlias];
 
@@ -875,3 +875,16 @@ function escapeRegex(str){
 }
 
 module.exports = Jnr; // pwd, this script is to be called within job dir
+
+
+Jnr.__express = function(path, options, callback) {
+		
+		source = fs.readFileSync(path).toString()
+		
+		callback(null, renderTemplate(source, options));
+		
+}
+
+
+
+
