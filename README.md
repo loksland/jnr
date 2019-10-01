@@ -31,10 +31,10 @@ var result = jnr.render(template, data);
 
 Wrap variable names in `{{` double curly brackets `}}`.
 
-```node 
+```
 {{page.greeting}} 
 ```
-```node
+```
 Welcome
 ```
 
@@ -42,14 +42,14 @@ Welcome
 
 Conditional logic is defined by `if`, `elseif` and `else` tags.
 
-```node 
+```
 {{if user.logged_in}}
   Log out
 {{else}}
   Log in
 {{/if}}
 ```
-```node 
+```
 Log out  
 ```
 
@@ -57,7 +57,7 @@ Log out
 
 The `each` ... `as` tag is used to loop arrays and objects.
 
-```node 
+```
 {{each pets as pet}}
 - {{pet.name}} ${{pet.price}}
 {{/each}} 
@@ -69,10 +69,10 @@ The `each` ... `as` tag is used to loop arrays and objects.
 ```
 
 Object property names can be accessed by supplying a second property.
-```node
+```
 { scores: { Fred: 8, Barney: 4, Wilma: 5 } }
 ```
-```node 
+```
 {{each scores as name,score}}
 - {{name}} got {{score}}
 {{/each}}
@@ -84,15 +84,15 @@ Object property names can be accessed by supplying a second property.
 ```
 
 Array indexes can be accessed the same way.
-```node
+```
 { names: [ 'Fred', 'Barney', 'Wilma' ] }
 ```
-```node 
+```
 {{each names as index,name}}
 {{index}}) {{name}}
 {{/each}}
 ```
-```node 
+```
 0) Fred
 1) Barney
 2) Wilma
@@ -103,10 +103,10 @@ Array indexes can be accessed the same way.
 
 If the expression is followed by a `?` and it is not defined, it will not output and will not throw an error.
 
-```node
+```
 Hello {{username?}}
 ```
-```node
+```
 Hello
 ```
 
@@ -114,7 +114,7 @@ Hello
 
 Optionals can also be used to test conditional statements.
 
-```node 
+```
 {{if user.cart?}}  
   View cart ({{user.cart.length}})
 {{else}}
@@ -122,7 +122,7 @@ Optionals can also be used to test conditional statements.
 {{/if}} 
 ```
 
-```node
+```
 View cart (5)
 ```
 
@@ -131,10 +131,10 @@ View cart (5)
 Optional variables can be chained using double quotes `??`.   
 If the first expression isn't set the second (and third etc) will be used.
 
-```node
+```
 Oh hi {{user.nickname??user.firstname??user.surname}}
 ```
-```node
+```
 Oh hi Marcus
 ```
 
@@ -142,11 +142,11 @@ Oh hi Marcus
 
 Ternary operators can be used for shorthand conditional output.
 
-```node
+```
 Don't forget your {{weather.isRainy?packItem.rainy:packItem.sunny}}
 ```
 
-```node 
+```
 Don't forget your umbrella
 ```
 
@@ -154,14 +154,14 @@ Don't forget your umbrella
 
 Supported operators inlcude `==`,`!=`,`>`,`>=`,`<`,`<=`
 
-```node 
+```
 {{if user.cart.length > 0}}  
   View cart ({{user.cart.length}})
 {{else}}
   Cart is empty
 {{/if}} 
 ```
-```node 
+```
 Cart is empty
 ```
 ### Filters 
@@ -169,20 +169,20 @@ Cart is empty
 A filter is a function that modifies the data sent to it. Eg. `{{variable(%filter_name%)}}`.  
 Filters are applied according to the type of data sent to it.
 
-```node
+```
 {{cents}} cents is {{cents($currency)}}
 ```
 
-```node
+```
 1012344 cents is $10,123.44
 ```
 
 Separate successive filters with a comma `,` and they will be applied in order.
 
-```node
+```
 {{message(uppercase,hyphenate)}}
 ```
-```node
+```
 GREEN-EGGS-AND-HAM
 ```
 
@@ -192,14 +192,14 @@ Read more advanced filter operations [here](FILTERS.md).
 
 Output blocks can have a filter applied using the `filter(%filter_name%)` tag.
 
-```node 
+```
 {{filter(md)}}
 ### {{title}}
 This is *rendered* as **HTML**.
 {{/filter}}
 ```
 
-```node 
+```
 <h3>Welcome!</h3>
 <p>This is <em>rendered</em> as <strong>HTML</strong>.</p>
 ```
@@ -209,13 +209,13 @@ This is *rendered* as **HTML**.
 Complex expressions are safely resolved using [safe-eval](https://www.npmjs.com/package/safe-eval) library.
 
 Brackets, maths functions, filters, single and double quotes and variable names are all supported. 
-```node  
+```
 {price_cents_ex:1848, tax_rate:.1}
 ```
-```node
+```
 Price: {{'$' + Math.round(price_cents_ex*(1+tax_rate))/100 + " inc tax"}}
 ```
-```node 
+```
 price: $20.33 inc tax
 ```
 
@@ -224,24 +224,24 @@ price: $20.33 inc tax
 
 Variables can be set using the `set` tag. Dot syntax is supported.
 
-```node  
+```
 {cart:[{price:1.32},{price:2.33},{price:5.43}]}
 ```
-```node
+```
 {{set cart_total=0}}
 {{each cart as item}}
   {{set cart_total=cart_total + item.price}}
 {{/each}}
 Total: {{'$' + cart_total}}
 ```
-```node 
+```
 Total: $9.08
 ```
 
 ### Capturing blocks
 Blocks of the template can be captured to a variable using `set %var_name%=...(%filters%)`.
 
-```node  
+```
 {{set receipt=...(uppercase)}}
   {{set cart_total=0}}
   {{each cart as index,item}}
@@ -254,7 +254,7 @@ Blocks of the template can be captured to a variable using `set %var_name%=...(%
 {{receipt}}
 ```
 
-```node 
+```
 ITEM 1 PRICE IS $1.32
 ITEM 2 PRICE IS $2.33
 ITEM 3 PRICE IS $5.43
@@ -273,7 +273,7 @@ If set to true the function will return an object with 2 properties:
 - `render.result` the result of the render
 - `render.data` a copy of the supplied data object including any `set` variables
 
-```node 
+``` 
 {{set inlineMeta=...(yaml)}}
 men: [John Smith, Bill Jones]
 women:
@@ -282,15 +282,14 @@ women:
 {{/set}}
 ```
 
-```node 
+```node
 var result = jnr.render(exp, data, {returnAlteredData:true});
 console.log(result.data.inlineMeta.men[1]);
 ```
 
-```node 
+```
 Bill Jones
 ```
-
 
 ### Custom tags
 
@@ -299,10 +298,10 @@ Custom template tags can be defined using `jnr.setTags(%opening_tag%,%closing_ta
 ```node
 jnr.setTags('%','%')
 ```
-```node 
+```
 %page.greeting% 
 ```
-```node
+```
 Welcome
 ```
 

@@ -7,26 +7,26 @@
 
 Outputs supplied native date object as readable date and time.
 
-```node
+```
 {now:new Date()}
 ```
-```node
+```
 It is {{now(readable)}}
 ```
-```node
+```
 `It is October 1st 2019, 12:09:05pm`
 ```
 
 **int.$currency**   
 
 Outputs supplied cents as dollars with dollar sign and thousand commas.
-```node 
+```
 {cents:1012344}
 ```
-```node
+```
 {{cents}} cents is {{cents($currency)}}
 ```
-```node 
+``` 
 1012344 cents is $10,123.44
 ```
 
@@ -34,20 +34,20 @@ Outputs supplied cents as dollars with dollar sign and thousand commas.
 
 Output supplied minutes as hours to 2 decimal points with `hr/s` appended.
 
-```node 
+``` 
 {mins:1245}
 ```
-```node
+```
 {{mins(minsToHrs)}}
 ```
-```node 
+``` 
 20.75hrs
 ```
 
 **str.yaml**   
 
 Converts supplied YAML string to object, using the [js-yaml](https://www.npmjs.com/package/js-yaml) library.
-```node 
+``` 
 {{set myInlineVar=...(yaml)}}
 men: [John Smith, Bill Jones]
 women:
@@ -57,17 +57,17 @@ women:
 
 {{myInlineVar.women[1]}}
 ```
-```node 
+``` 
 Wilma Williams
 ```
 
 **str.md**   
 
 Converts supplied markdown string to HTML string, using the [markdown-it](https://www.npmjs.com/package/markdown-it) library. If the supplied string has line breaks, the result will be wrapped in a p tag.
-```node 
+``` 
 {{filter(md)}}{{title}}, this is *rendered* as **HTML**.{{/filter}}
 ```
-```node 
+``` 
 Welcome, this is <em>rendered</em> as <strong>HTML</strong>.
 ```
 
@@ -75,13 +75,13 @@ Welcome, this is <em>rendered</em> as <strong>HTML</strong>.
 
 Outputs supplied array as a list sentence.
 
-```node 
+``` 
 { turtles: [ 'Donatello', 'Raphael', 'Michaelangelo', 'Leonardo' ] }
 ```
-```node 
+``` 
 {{turtles(sentence)}}
 ```
-```node 
+``` 
 Donatello, Raphael, Michaelangelo and Leonardo
 ```
 
@@ -117,9 +117,9 @@ jnr.registerFilter('arr', 'oxfordComma', function(arr){
 });
 ```
 
-```node 
+``` 
 {{names(oxfordComma)}}
 ```
-```node 
+``` 
 Fred, Barney, and Wilma
 ```
