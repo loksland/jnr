@@ -7,7 +7,7 @@ A simple and powerful templating engine that supports:
  - non-string templates
  - ternary operators
  - looping control flow 
- - custom processing filters
+ - [custom processing filters](FILTERS.md)
  - expression evaluation
  - block capture
 
