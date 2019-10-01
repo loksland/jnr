@@ -62,7 +62,7 @@ The `each` ... `as` tag is used to loop arrays and objects.
 - {{pet.name}} ${{pet.price}}
 {{/each}} 
 ```
-```node 
+``` 
 - Hamster $25.95
 - Guinea Pig $18.80
 - Parrot $23.33
@@ -77,7 +77,7 @@ Object property names can be accessed by supplying a second property.
 - {{name}} got {{score}}
 {{/each}}
 ```
-```node 
+``` 
 - Fred got 8
 - Barney got 4
 - Wilma got 5
