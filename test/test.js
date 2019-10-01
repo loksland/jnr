@@ -1,8 +1,242 @@
 #! /usr/bin/env node
 
-
 var jnr = require('../jnr');
 
+
+
+
+/*
+var data = {now:new Date()};
+var tpl = `
+
+{{turtles(sentence)}}
+
+`
+
+var result = jnr.render(tpl, data,true);
+console.log('+ + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +')
+console.log(result.rendered);
+console.log(result.data);
+process.exit(1);
+
+*/
+
+console.log(ttl('To sort')); 
+
+var data = {num:30}
+runTest({
+ttl:'Brackets',
+exp: '{{(num-28)*(num+3)}}',
+data: data,
+eq: '66'
+});
+
+
+var data = {num:6}
+runTest({
+ttl:'Brackets with filters',
+exp: '{{set num=(60*((num*2+8)/10))(minsToHrs)}}{{num}}',
+data: data,
+eq: '2hrs'
+});
+
+var data = {num:30}
+runTest({
+ttl:'Set with brackets with filters',
+exp: '{{(num-28)*(num+3)-6(minsToHrs)}}',
+data: data,
+eq: '1hr'
+});
+
+var data = {num:4}
+runTest({
+ttl:'Math constants',
+exp: '{{num + Math.round(Math.PI)}}',
+data: data,
+eq: '7'
+});
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Single quote escaping',
+exp: `{{name + "'s"}}`,
+data: data,
+eq: `Ken's`
+});
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Double quote escaping',
+exp: `{{'"' + name + '"'}}`,
+data: data,
+eq: `"Ken"`
+});
+
+var data = {name:'Ken',nameB:'Jenny\'s'}
+runTest({
+ttl:'Single quote escaping with slashes',
+exp: '{{name + \' single quote\\\'s \' + nameB}}',
+data: data,
+eq: 'Ken single quote\'s Jenny\'s'
+});
+
+
+var data = {name:'Ken',nameB:"Jenny\"s"}
+runTest({
+ttl:'Double quote escaping with slashes',
+exp: "{{name + \" double quote\\\"s \" + nameB}}",
+data: data,
+eq: "Ken double quote\"s Jenny\"s"
+});
+
+
+var data = {mins:20}
+runTest({
+ttl:'Modulo operation',
+exp: '{{mins%3}}',
+data: data,
+eq: '2'
+})
+
+
+var data =  {mins:20}
+runTest({
+ttl:'Spacing in expression and filter',
+exp: '{{mins + 100( minsToHrs )}}',
+data: data,
+eq: '2hrs'
+})
+
+
+// Custom test
+var title = 'YAML filter - loading inline data and getting data';
+var exp = `{{set myInlineVar=...(yaml)}}
+men: [John Smith, Bill Jones]
+women:
+  - Mary Smith
+  - {{firstName}} Williams{{/set}}:P`;
+var data = {firstName:'Susan'};
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {returnAlteredData:true})
+var pass = result.data.myInlineVar.women[1] == 'Susan Williams'
+console.log(data)
+console.log(exp)
+console.log(result.rendered)
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+config.exp+'`');
+}
+
+
+
+var data =  {num:1}
+runTest({
+ttl:'Object expression with common edited data',
+exp: {foo:'{{num}}', bar:'{{set num=num+1}}{{num}}', jo:'{{set num=num+1}}{{num}}'},
+data: data,
+eq: function(res){
+  return res.foo == '1' && res.bar == '2' && res.jo == '3'
+}
+})
+
+
+var data = {title:'Welcome!'}
+runTest({
+ttl:'YAML filter - loading inline data',
+exp: `{{set data=...(yaml)}}
+men: [John Smith, Bill Jones]
+women:
+  - Mary Smith
+  - Susan Williams{{/set}}#w1:{{data.women.1}}`,
+data: data,
+eq: '#w1:Susan Williams'
+})
+
+
+var data = {title:'Welcome!'}
+runTest({
+ttl:'Markdown filter (md) - multiline',
+exp: '{{filter(md)}}### {{title}}\nThis is *rendered* as **HTML**.{{/filter}}',
+data: data,
+eq: '<h3>Welcome!</h3>\n<p>This is <em>rendered</em> as <strong>HTML</strong>.</p>\n'
+})
+
+var data = {title:'Welcome'}
+runTest({
+ttl:'Markdown filter (md) - single line',
+exp: '{{filter(md)}}{{title}}, this is *rendered* as **HTML**.{{/filter}}',
+data: data,
+eq: 'Welcome, this is <em>rendered</em> as <strong>HTML</strong>.'
+})
+
+var data = {msg:'ok'};
+runTest({
+ttl:'Filter blocks',
+exp: '{{filter(uppercase)}}This should be upper case. {{msg}}{{/filter}}',
+data: data,
+eq: 'THIS SHOULD BE UPPER CASE. OK'
+})
+
+
+var data = {num:1};
+runTest({
+ttl:'Comment blocks',
+exp: 'Pre comment,{{/* {{if num==1}} Number is one {{/if}} */}} post comment{{/* num is {{num}} {{/if}} */}}.',
+data: data,
+eq: 'Pre comment, post comment.'
+})
+
+
+var data = {num:1};
+runTest({
+ttl:'Var set',
+exp: '{{num}}{{set num=num+1}}{{num}}{{set num=num+1}}{{num}}',
+data: data,
+eq: '123'
+})
+
+var data = {people:[{name:'ken'},{name:'wilma'}]};
+runTest({
+ttl:'Var set with dot notation',
+exp: '{{set people.1.name=\'barney\'}}{{each people as person}}{{person.name}},{{/each}}',
+data: data,
+eq: 'ken,barney,'
+})
+
+var data = {name:'ken'};
+runTest({
+ttl:'Block capture',
+exp: '{{set myvar=...(uppercase)}}My name is {{name}}{{/set}}Uppercase is {{myvar}}',
+data: data,
+eq: 'Uppercase is MY NAME IS KEN'
+})
+
+var data = {number:10};
+runTest({
+ttl:'Number and constant calculations',
+exp: 'Number plus one is {{number+1}}',
+data: data,
+eq: 'Number plus one is 11'
+})
+
+var data = {number:10};
+runTest({
+ttl:'Number and complex constant calculations',
+exp: 'Number resolves to {{number+10-40}}',
+data: data,
+eq: 'Number resolves to -20'
+})
+
+var data = {petowners:[{name:'fred', pets:['dog','cat']},{name:'barney', pets:['goat']}]};
+runTest({
+ttl:'Loop within a loop',
+exp: '{{each petowners as petowner}}{{petowner.name}} has {{each petowner.pets as pet}}a {{pet}}, {{/each}}{{/each}}',
+data: data,
+eq: 'fred has a dog, a cat, barney has a goat, '
+})
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 console.log(ttl('Basics'));
 
@@ -445,8 +679,8 @@ eq: '$14,342.31'
 
 var data = {now:new Date()};
 runTest({
-ttl:'date: filename',
-exp: '{{now(filename)}}',
+ttl:'date: ymd',
+exp: '{{now(ymd)}}',
 data: data,
 eq: function(res){
   return res.length == 10 && res.charAt(4) == '-' && res.charAt(7) == '-';
@@ -554,6 +788,8 @@ eq: 'My name is Laurence'
 })
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 
+console.log('\nALL PASS\n')
+
 function ttl(msg){
 
   return '\n' + msg + '\n' + '='.repeat(msg.length);
@@ -563,7 +799,7 @@ function ttl(msg){
 function runTest(config){
 
   console.log('\n`'+config.ttl+'` test...');
-  var result = jnr.apply(config.exp, config.data)
+  var result = jnr.render(config.exp, config.data)
   var pass;
   if (typeof config.eq == 'function'){
     pass = config.eq(result);
@@ -574,7 +810,7 @@ function runTest(config){
   console.log(config.exp)
   console.log(result)
   console.log((pass ? 'OK' : 'FAIL'));
-  if (!pass){
+  if (!pass){    
     throw new Error('Test failed for `'+config.exp+'`');
   }
 

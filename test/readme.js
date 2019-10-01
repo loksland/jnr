@@ -12,6 +12,7 @@ var output = '';
 
 
 
+
 output += h3('Substitution');
 
 output += codeblock({
@@ -186,6 +187,17 @@ exp: '{{each animals as index,animal,sound}}({{index}}){{animal}}s go {{sound}}{
 data: {animals:{dog:'woof',cat:'meow',bird:'tweet'}}
 })
 
+output += codeblock({
+ttl:'Loop within a loop',
+abstract: '{{each exps as index,prop,exp}}{{/each}}',
+exp: `
+{{each petowners as petowner}}{{petowner.name}} has {{each petowner.animals as animal}}<{{animal}}>{{/each}} ({{petowner.animals.length}}),{{/each}}
+`, //{{if !ISLAST}},{{else}}.{{/if}}
+data: {petowners:[{name:'Fred', animals:['cat','dog']},{name:'Barney', animals:['emu','goat','rooster ']}]}
+})
+
+
+
 output += h3('Working with arrays and objects');
 
 output += codeblock({
@@ -340,7 +352,7 @@ jnr.setTags('{{','}}')
 
 
 console.log(output)
-
+/*
 var readmeMD = fs.readFileSync('../README.md', 'utf8');
 var readmeParts = readmeMD.split('<!--readme-->');
 var readmeEndParts = readmeParts[1].split('<!--/readme-->');
@@ -348,6 +360,7 @@ readmeEndParts[0] = output + '<!--/readme-->';
 
 readmeParts[1] = '<!--readme-->' + readmeEndParts.join('')
 fs.writeFileSync('../README.md', readmeParts.join(''));
+*/
 
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 

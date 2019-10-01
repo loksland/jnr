@@ -8,6 +8,37 @@
 var fs = require('fs');
 var path = require('path');
 var moment = require('moment');
+var yaml = require('js-yaml');
+var safeEval = require('safe-eval')
+
+
+
+// https://markdown-it.github.io/
+// full options list (defaults)
+var md = require('markdown-it')({
+  html:         true,        // Enable HTML tags in source
+  xhtmlOut:     false,        // Use '/' to close single tags (<br />).
+                              // This is only for full CommonMark compatibility.
+  breaks:       false,        // Convert '\n' in paragraphs into <br>
+  langPrefix:   'language-',  // CSS language prefix for fenced blocks. Can be
+                              // useful for external highlighters.
+  linkify:      true,        // Autoconvert URL-like text to links
+ 
+  // Enable some language-neutral replacement + quotes beautification
+  typographer:  true,
+ 
+  // Double + single quotes replacement pairs, when typographer enabled,
+  // and smartquotes on. Could be either a String or an Array.
+  //
+  // For example, you can use '«»„“' for Russian, '„“‚‘' for German,
+  // and ['«\xA0', '\xA0»', '‹\xA0', '\xA0›'] for French (including nbsp).
+  // quotes: '“”‘’',
+ 
+  // Highlighter function. Should return escaped HTML,
+  // or '' if the source string is not changed and should be escaped externally.
+  // If result starts with <pre... internal wrapper is skipped.
+  // highlight: function (/*str, lang*/) { return ''; }
+});
 
 var TPL_TAG_OPEN = TPL_TAG_OPEN_DEFAULT = '{{'; // Can be the same char
 var TPL_TAG_CLOSE = TPL_TAG_CLOSE_DEFAULT = '}}'; // Can be the same char
@@ -16,11 +47,20 @@ var TPL_TAG_OPEN_REGSAFE = escapeRegex(TPL_TAG_OPEN);
 var TPL_TAG_CLOSE_REGSAFE = escapeRegex(TPL_TAG_CLOSE);
 
 function Jnr(){
-
 }
 
-Jnr.render = Jnr.apply = function(obj, data){
-	return renderTemplate(obj, data);
+// - `returnAlteredData` if set to true, instead of returning rendered object will return obj and the data
+// {rendered:obj, data:obj}
+Jnr.render = Jnr.apply = function(obj, data, options = {}){
+  
+  var _data = dupe(data); // Create a duplicate data to work with
+  
+  var rendered = renderTemplate(obj, _data);
+  
+  if (options.returnAlteredData){ // This can be used to access the result of `set` calls.
+    return {rendered:rendered, data:_data};
+  }
+	return rendered;
 }
 
 // Can be the same char
@@ -38,30 +78,28 @@ Jnr.setTags = function(tagOpen, tagClose){
 
 // Template
 // --------
-
 function renderTemplate(obj, data){
 
-	// Apply recursively
+	// Apply recursively looking for string data
 
 	if (isNonArrObj(obj)){
 
-		obj = dupe(obj);
-
+		obj = dupe(obj); // Duplicate the template to keep original
 		for (var p in obj){
 			obj[p] = renderTemplate(obj[p], data);
 		}
 
 	} else if (Array.isArray(obj)){
 
-		obj = obj.slice()
-
+		obj = dupe(obj); // Duplicate the template to keep original
 		for (var i = 0 ; i < obj.length; i++){
 			obj[i] = renderTemplate(obj[i], data);
 		}
 
 	} else if (typeof obj !== 'string'){
 
-		return obj;
+    throw new Error('Unkown object.');
+		//return obj;
 
 	}
 
@@ -69,39 +107,164 @@ function renderTemplate(obj, data){
 
 	var keepLooping = true;
 	var str = obj;
+	
 	while (keepLooping){
 		var strPreApply = str;
 		str = renderTemplateString(strPreApply, data);
 		keepLooping = str != strPreApply;
 	}
-
-	if (typeof data._logic_blocks !== 'undefined'){
+  
+  if (typeof data._logic_blocks !== 'undefined'){
 		delete data._logic_blocks;
 	}
-
+  
+  //if (returnAlteredData){
+  //  return {result:str, data:obj}
+  //}
 	return str;
 
 }
 
 var LOGIC_BLOCK_TYPE_LOOP = 'loop';
 var LOGIC_BLOCK_TYPE_CONDITIONAL = 'cond';
+var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 
 function renderTemplateString(str, data){
-
+	
 	if (data._logic_blocks == undefined){
 		data._logic_blocks = [];
 	}
 
 	var preStr = str;
+	
+	// Comment blocks
+	// --------------
+	
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '\/\\*' + '(.|\s|\r|\n)*?' + '\\*\/' + TPL_TAG_CLOSE_REGSAFE, 'gim');
+	
+	var origStr = str;
+	var m;
+	var indexOffset = 0;
+	while ((m = regex.exec(origStr)) !== null) {
 
-	// Repeat loops (arrays)
-	// Note: Nested repeat loops not supported ATM
+			if (m.index === regex.lastIndex) {
+					regex.lastIndex++;
+			}
 
-	// var regex = new RegExp(TPL_TAG_OPEN + 'each ([^'+TPL_TAG_OPEN+TPL_TAG_CLOSE+']+) as ([^'+TPL_TAG_OPEN+TPL_TAG_CLOSE+' ]*)'+TPL_TAG_CLOSE+'((?:(?!'+TPL_TAG_OPEN+'each)(?!'+TPL_TAG_OPEN+'if).|[\r\n])*?)'+TPL_TAG_OPEN+'\/each'+TPL_TAG_CLOSE, 'gim');
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'each ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+) as ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' ]*)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/each'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+			var val = '';
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
+	}
+	
+	// Simple set 
+	// ----------
+	
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)\\=(?:(?!\\.\\.\\.))(.*?)(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE;
+	var regex = new RegExp(regexStr, 'gim');
+  
+	var origStr = str;
+	var m;
+	var indexOffset = 0;
+	while ((m = regex.exec(origStr)) !== null) {
+
+			if (m.index === regex.lastIndex) {
+					regex.lastIndex++;
+			}
+
+			var block = {};
+			
+			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
+			block.setVarPath = m[1];
+			block.captureContents = false;
+      block.expressionContents = m[2] + (m[3] ? m[3] : ''); // m[3] is the filter including brackets
+			block.captureFilterListStr = false; // Remove brackets
+			block.output = false;
+			
+			block.index = data._logic_blocks.length;
+			data._logic_blocks.push(block);
+
+			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
+			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
+	}
+	
+	// Filter block
+	// ------------
+	// Just like a set capture block though is outputted immediately
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'filter(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	
+	var origStr = str;
+	var m;
+	var indexOffset=0;
+	while ((m = regex.exec(origStr)) !== null) {
+
+			if (m.index === regex.lastIndex) {
+					regex.lastIndex++;
+			}
+
+			var block = {};
+			
+			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
+			block.setVarPath = false;
+			block.captureFilterListStr = (!m[1] || m[1].trim() == '()') ? '' : m[1].substr(1, m[1].length-2); // Remove brackets
+			block.captureContents = m[2];
+      block.expressionContents = false;
+			block.output = true;
+			
+			block.index = data._logic_blocks.length;
+			data._logic_blocks.push(block);
+
+			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
+			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
+	}
+	
+	// Set capture block
+	// -----------------
+
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'set ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)\\=\\.\\.\\.(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	
+	var origStr = str;
+	var m;
+	var indexOffset=0;
+	while ((m = regex.exec(origStr)) !== null) {
+
+			if (m.index === regex.lastIndex) {
+					regex.lastIndex++;
+			}
+
+			var block = {};
+			
+			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
+			block.setVarPath = m[1];
+			block.captureFilterListStr = (!m[2] || m[2].trim() == '()') ? '' : m[2].substr(1, m[2].length-2); // Remove brackets
+			block.captureContents = m[3];
+      block.expressionContents = false;
+			block.output = false;
+			
+			block.index = data._logic_blocks.length;
+			data._logic_blocks.push(block);
+
+			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
+			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
+	}
+
+	// Each loops
+	// ----------
+
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'each ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+) as ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' ]*)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/each'+TPL_TAG_CLOSE_REGSAFE, 'gim');
 
 	var origStr = str;
 	var m;
+	var indexOffset=0;
 	while ((m = regex.exec(origStr)) !== null) {
 
 			if (m.index === regex.lastIndex) {
@@ -132,15 +295,21 @@ function renderTemplateString(str, data){
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
 
-			str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
-
+			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)			
+			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
 	}
-
+	
+	// If else conditionals
+	// --------------------
+	
 	var origStr = str;
-
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'if ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if).|[\r\n])*?)(?:'+TPL_TAG_OPEN_REGSAFE+'else'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if).|[\r\n])*?))*'+TPL_TAG_OPEN_REGSAFE+'\/if'+TPL_TAG_CLOSE_REGSAFE, 'gim');
-
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'if ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)(?:'+TPL_TAG_OPEN_REGSAFE+'else'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?))*'+TPL_TAG_OPEN_REGSAFE+'\/if'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	
 	var m;
+	var indexOffset = 0;
 	while ((m = regex.exec(origStr)) !== null) {
 
 			if (m.index === regex.lastIndex) {
@@ -154,8 +323,7 @@ function renderTemplateString(str, data){
 			block.condContents = [m[2]]; // The rest, inc `elseif`, parsed below
 			block.condContentElse = m[3]; // else () contents
 
-			// elseif parsing
-			// -------------
+			// `elseif` parsing
 
 			// Look for elseif in m[2]
 			if (m[2].toLowerCase().split('elseif').length > 1) {
@@ -178,43 +346,70 @@ function renderTemplateString(str, data){
 				}
 
 				block.condContents.push(m[2].substr(lastIndex, m[2].length-lastIndex)) // Last cond's content is the remainder
-
+				
 			}
 
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
 
-			str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
-
+			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)			
+			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
+			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			
 	}
-
+	
+	// Keep processing until all logic blocks are resolved
 	if (str != preStr){
 		return renderTemplateString(str, data);
 	}
 
-	// Individual expressions to be resolved
-
+	// Process simple tags and logic blocks
+	// ------------------------------------
+	
 	var result = str;
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE+'([^ '+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/][^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE;
+	var regex = new RegExp(regexStr, 'gim');
+	
+	// - Don't match expressions with a / at the start to avoid matiching /if /each 
+	// - Don't match if the expression = `else`
+	
 	var m;
-
+	var indexOffset = 0;
 	while ((m = regex.exec(str)) !== null) {
 
-			// This is necessary to avoid infinite loops with zero-width matches
 			if (m.index === regex.lastIndex) {
 					regex.lastIndex++;
 			}
-
+			
 			var exp = m[1];
 			var val = parseTemplateExpression(exp, data);
-
+			
 			if (exp.length > 14 && exp.substr(0,14) == '_logic_blocks.'){
 
 				var block = val;
-
-				if (block.type == LOGIC_BLOCK_TYPE_CONDITIONAL){
-
-					var conditionalExp;
+				
+				if (block.type == LOGIC_BLOCK_TYPE_SET_CAPTURE){
+					
+          var _val;
+          if (block.expressionContents !== false){ // One line set call, parse expression to retain data type of results
+            _val = parseTemplateExpression(block.expressionContents, data);
+          } else if (block.captureContents !== false){ // Capture block, result will always be a string
+            _val = applyFilters(renderTemplateString(block.captureContents, data), block.captureFilterListStr);	
+          } else {
+            throw new Error('Invalid set encountered.')
+          }
+          
+					if (block.setVarPath !== false){
+						data = setObjPathVal(data, block.setVarPath, _val);					
+					}					
+					val = block.output ? _val : '';
+					
+				} else if (block.type == LOGIC_BLOCK_TYPE_CONDITIONAL){
+					
+					// Output if/else block results
+						
+					var conditionalExp = false
 					for (var i = 0; i < block.condExps.length; i++){ // Look for first true conditional expression
 						var conditionalResult = parseTemplateExpression(block.condExps[i], data, true); // resolveOptionalsToBoolean = true
 						if (conditionalResult === true){
@@ -224,14 +419,16 @@ function renderTemplateString(str, data){
 							throw new Error('Conditional subject must resolve to a bool, exp `' + block.condExp+'` resolved to `'+conditionalResult+'`, (type:'+typeof conditionalResult+')');
 						}
 					}
-
-					if (conditionalExp == undefined) { // No true conditions found
+					
+					if (conditionalExp === false) { // No true conditions found
 						conditionalExp = (block.condContentElse == null) ? '' : block.condContentElse
 					}
 
 					val = renderTemplateString(conditionalExp, data);
-
+					
 				} else if (block.type == LOGIC_BLOCK_TYPE_LOOP){
+					
+					// Output each block results
 
 					var saveExistingloopPropValAlias;
 					var saveExistingloopPropKeyAlias;
@@ -296,9 +493,7 @@ function renderTemplateString(str, data){
 							if (objIndexSet){
 								delete 	data[block.loopPropKeyAlias]
 							}
-
 						}
-
 					}
 
 					if (saveExistingloopPropValAlias != undefined){
@@ -313,29 +508,29 @@ function renderTemplateString(str, data){
 						data[block.loopPropObjIndexAlias] = saveExistingloopPropObjIndexAlias;
 					}
 
-
 				} else {
 					throw new Error('Logic block `'+exp+'` not found');
 				}
-
 			}
-
-			result = result.split(m[0]).join(val);
-
+			
+			// Due to `set` calls, order is now important. 
+			result = result.substr(0, m.index+indexOffset) + String(val) + result.substr(m.index+indexOffset + m[0].length);
+			indexOffset += String(val).length - m[0].length;
+			//result = result.split(m[0]).join(val);
+			
 	}
-
 
 	return result;
 
 }
 
 var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
-// In: `obj.param.prop(filterA)??fallback.prop.name(filerB,filterC)`
-function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 
-	resolveOptionalsToBoolean = typeof resolveOptionalsToBoolean !== 'undefined' ? resolveOptionalsToBoolean : false; // Optional param
+function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
+  exp = String(exp).trim(); // May not be string?
 	var origExp = exp;
+  
 	var props;
 	var m;
 
@@ -359,6 +554,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 
 	exp = exp.split('___optionalchain___').join('??');
 
+
 	// Equation
 
 	for (var i = 0 ; i < RELATIONAL_OPERATORS.length; i++){
@@ -367,6 +563,8 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 		var eqParts = exp.split(operator);
 
 		if (eqParts.length > 1){
+      
+      
 
 			if (eqParts.length != 2){
 				throw new Error('Invalid relational operator `'+exp+'`');
@@ -374,7 +572,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 
 			var partA = parseTemplateExpression(eqParts[0], data)
 			var partB = parseTemplateExpression(eqParts[1], data);
-
+      
 			if (operator == '==') {
 				return partA == partB;
 			} else if (operator == '!=') {
@@ -411,94 +609,43 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 
 	// Optional chain
 	props = exp.split('??');
-
+	
 	var result;
 
 	// Search optional props in order
 	for (var i = 0; i < props.length; i++){
 
 		var prop = props[i];
-
+    
 		// Find filters
-		var filters = [];
+		
+		var filters = '';
 		var m;
-		if ((m = new RegExp(/\(([^\)]+)\)$/i).exec(prop)) !== null) {
+    // Match valid filter names, no spaces in trailing brackets at end of string
+		if ((m = new RegExp(/\( *([a-zA-Z_$][0-9a-zA-Z_$]+ *(?:, *[a-zA-Z_$][0-9a-zA-Z_$]+)?) *\)$/i).exec(prop)) !== null) {
 				prop = prop.substr(0, prop.length - m[0].length);
-				filters = m[1].split(',');
+				filters = m[1]; //.split(',');
 		}
 
-		// Resolve literals
-
-		var result;
-
-		var ml;
-		var isLiteral = false;
-		if ((ml = new RegExp(/(?:^'(.*)'$)|(?:^([+-/ *0-9.]+)$)|(^true$)|(^false$)/im).exec(prop)) !== null) {
-
-				isLiteral = true;
-				if (ml[1] != null){
-					result = ml[1]; // String
-				} else if (ml[2] != null){
-					// Numeric expressions
-					result = eval(ml[2]);
-				} else if (ml[3] === 'true'){
-					result = true;
-				} else if (ml[4] === 'false'){
-					result = false;
-				}
-
+		// Loop possible prop names in prop and inject value if found.
+		
+    result = getObjPath(data, prop);
+    
+		if (result == undefined){ // Try evaluating
+      
+      try {
+        
+        result = safeEval(prop, data); // Will throw error if invalid
+      
+      } catch(error) {
+        
+      }
+      
 		}
 
-		// See if prop is set
-		result = isLiteral ? result : getObjPath(data, prop);
-
-		if (result == undefined){
-
-			// Resolve `inline` numerical expressions and try to eval them
-
-			var mk;
-			var possiblePropMatchRegex =  new RegExp(/([^0-9^ /*+-]+[^ /*+-]*)/img); // Look for prop names (false positive ok)
-			var potentialInlineExps = [];
-			var propParts = [];
-			var propIndex = 0;
-			var isNumericRegex = RegExp(/[+-/ *0-9.]+/im);
-			while ((mk = possiblePropMatchRegex.exec(prop)) !== null) {
-			    if (mk.index === possiblePropMatchRegex.lastIndex) {
-			        regex.lastIndex++;
-			    }
-					if (mk.index > propIndex) {
-						propParts.push(prop.substr(propIndex, mk.index));
-					}
-					propIndex = mk.index + mk[1].length;
-					var _result = getObjPath(data, mk[1]); // Attempt to resolve the prop
-					if (_result != undefined && !isObj(_result) && isNumericRegex.test(_result)) {
-						propParts.push(String(_result))
-					} else {
-						propParts.push(prop.substr(mk.index, propIndex));
-					}
-			}
-			if (prop.length > propIndex) {
-				propParts.push(prop.substr(propIndex, prop.length));
-			}
-
-			var ml;
-			var isLiteral = false;
-			if ((ml = new RegExp(/(?:^'(.*)'$)|(?:^([+-/ *0-9.]+)$)|(^true$)|(^false$)/im).exec(propParts.join(''))) !== null) {
-				if (ml[2] != null){
-					// Numeric expressions
-					result = eval(ml[2]);
-				}
-			}
-
-		}
-
-		if (result != undefined){
-
+		if (result != undefined){      
 			// Apply filters
-			for (var i = 0; i < filters.length; i++){
-				result = applyFilter(result, filters[i]);
-			}
-
+			result = applyFilters(result, filters);
 			break;
 
 		}
@@ -534,8 +681,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean) {
 
 	// The result may have more expressions in them,
 	// If any further expressions are identified in the output then keep applying the template
-
-
+	
 	return result;
 
 }
@@ -550,7 +696,7 @@ FILTERS['*'] = {};
 
 FILTERS.arr = {};
 
-FILTERS.arr.verbalList = function(arr){
+FILTERS.arr.sentence = function(arr){
   var result = [];
   for (var i = 0; i < arr.length; i++){
     if (i > 0){
@@ -561,10 +707,28 @@ FILTERS.arr.verbalList = function(arr){
   return result.join('');
 };
 
-
 FILTERS.obj = {};
 
 FILTERS.str = {};
+
+FILTERS.str.md = function(str){
+	
+	return str.split('\n').length == 1 ? md.renderInline(str) : md.render(str);
+	
+}
+
+FILTERS.str.yaml = function(str){
+  
+  try {
+    return yaml.safeLoad(str);
+  } catch (e) {
+    throw e;
+  }
+  
+  return null
+  
+}
+
 // Lowercase, replace spacing with hyphens.
 FILTERS.str.slugify = function(str){
 	return str.toLowerCase().replace(new RegExp(/\s+/igm), '-');
@@ -584,6 +748,10 @@ FILTERS.str.nbsp = function(str){
 
 FILTERS.str.uppercase = function(str){
 	return str.toUpperCase();
+}
+
+FILTERS.str.lowercase = function(str){
+	return str.toLowerCase();
 }
 
 FILTERS.str.hyphenate = function(str){
@@ -639,7 +807,6 @@ FILTERS.int.minsToHrs = function(mins){
 		hrsStr += '.' + minsStr;
 	}
 
-
 	var isPlural = mins==60;
 	return hrsStr + 'hr' + (isPlural ? '' : 's');
 
@@ -648,7 +815,7 @@ FILTERS.int.minsToHrs = function(mins){
 }
 FILTERS.date = {};
 // https://momentjs.com/docs/#/displaying/
-FILTERS.date.filename = function(date){
+FILTERS.date.ymd = function(date){
 	return moment(date).format('YYYY-MM-DD');
 }
 FILTERS.date.display = function(date){
@@ -670,6 +837,24 @@ Jnr.registerFilter = function(dataType, filterName, filterFn) {
 
 }
 
+// Param `filters` is a string without brackets of filter names separated by commas.
+// If filterList is set to '' then no filters present
+function applyFilters(obj, filterList){
+	
+	if (filterList.length == 0){
+		return obj;
+	}
+	
+	var filterArr = filterList.split(' ').join('').split(','); // Remove spaces
+	
+	for (var i = 0; i < filterArr.length; i++){
+		var filterName = filterArr[i];
+		obj = applyFilter(obj, filterName);
+	}
+	
+	return obj;
+
+}
 
 function applyFilter(obj, filterName){
 
@@ -729,47 +914,21 @@ function applyFilter(obj, filterName){
 // Obj utils
 // ---------
 
-// Performs deep merge
-function mergeObjs(coreObj, appendObj, overwriteNonObjProps){
+function setObjPathVal(obj, path, val){
 
-	overwriteNonObjProps = typeof overwriteNonObjProps !== 'undefined' ? overwriteNonObjProps : true; // Optional param
-
-	var result = dupe(coreObj)
-
-	for (var p in appendObj){
-
-		if (result[p] == undefined){
-			result[p] = appendObj[p]; // May copy whole tree
-		} else if (!isObj(result[p]) && !isObj(appendObj[p]) && overwriteNonObjProps){
-			result[p] = appendObj[p];
-		} else if (isNonArrObj(result[p]) && isNonArrObj(appendObj[p])){
-			// Deep merge
-			result[p] = mergeObjs(result[p], appendObj[p], overwriteNonObjProps)
-		}
-		// Note: arrays are left alone
-
-	}
-
-	return result;
-
-}
-
-function ensureObjPathExists(obj, path){
-
-	var dupeObj = dupe(obj);
-
-	var ref = dupeObj;
+	var ref = obj;
 	var pathParts = path.split('.');
 	for (var i = 0; i < pathParts.length; i++){
-
-		if (ref[pathParts[i]] == undefined) {
-			ref[pathParts[i]] = {};
-		}
+			
+		if (i == pathParts.length - 1){
+			ref[pathParts[i]] = val;
+		}	else if (ref[pathParts[i]] == undefined) {
+			ref[pathParts[i]] =  {};
+		}	
 		ref = ref[pathParts[i]];
-
 	}
-
-	return dupeObj;
+	
+	return obj;
 
 }
 
@@ -781,7 +940,6 @@ function getObjPath(obj, path){
 	for (var i = 0; i < pathParts.length; i++){
 
 		var path = pathParts[i]
-
 
 		if (ref[path] == undefined) {
 
@@ -850,14 +1008,13 @@ Jnr.trace = function(obj, clipPaths){
 		}
 	}
 
-	console.log(JSON.stringify(objDupe, null, 2));
+  
+	console['log'](JSON.stringify(objDupe, null, 2));
 
 };
 
 function dupe(obj){
-
 	return JSON.parse(JSON.stringify(obj));
-
 }
 
 function isObj(obj){
@@ -874,17 +1031,15 @@ function escapeRegex(str){
 
 }
 
-module.exports = Jnr; // pwd, this script is to be called within job dir
-
+module.exports = Jnr;
 
 Jnr.__express = function(path, options, callback) {
-		
-		source = fs.readFileSync(path).toString()
-		
-		callback(null, renderTemplate(source, options));
+
+	fs.readFile(path, 'utf8', function read(err, data) {
+	  if (err) {
+	      throw err;
+	  }
+	  callback(null, renderTemplate(data, options));
+	});
 		
 }
-
-
-
-
