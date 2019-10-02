@@ -7,7 +7,7 @@ A simple and powerful templating engine that supports:
  - non-string templates
  - ternary operators
  - looping control flow 
- - [custom processing filters](FILTERS.md)
+ - [custom processing filters](docs/filters.md)
  - expression evaluation
  - block capture
 
@@ -186,7 +186,7 @@ Separate successive filters with a comma `,` and they will be applied in order.
 GREEN-EGGS-AND-HAM
 ```
 
-Read more advanced filter operations [here](FILTERS.md).
+Read more advanced filter operations [here](docs/filters.md).
 
 ### Filtering output 
 
