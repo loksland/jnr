@@ -169,7 +169,7 @@ Cart is empty
 A filter is a function that modifies the data sent to it, filters are separated by the pipe `|` character.   
 `{{variable|filterName}}`
     
-Filters are applied according to the type of data sent to it.
+Filters are applied according to the type of data sent to it. Read more about filters [here](docs/filters.md).
 
 ```
 {cents:1012344}
@@ -210,7 +210,7 @@ ken-jones
 ```
 
 
-Read more about filters [here](docs/filters.md).
+
 
 ### Filtering output 
 
@@ -240,7 +240,7 @@ Brackets, maths functions, filters, single and double quotes and variable names 
 Price: {{'$' + Math.round(price_cents_ex*(1+tax_rate))/100 + " inc tax"}}
 ```
 ```
-price: $20.33 inc tax
+Price: $20.33 inc tax
 ```
 
 

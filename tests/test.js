@@ -21,6 +21,13 @@ process.exit(1);
 
 console.log(ttl('To sort')); 
 
+var data = {price_cents_ex:1848, tax_rate:.1}
+runTest({
+ttl:'Inline bracket calculations and Maths operations',
+exp: `Price: {{'$' + Math.round(price_cents_ex*(1+tax_rate))/100 + " inc tax"}}`,
+data: data,
+eq: 'Price: $20.33 inc tax'
+});
 
 
 var data = {name:'Ken'}
@@ -759,6 +766,8 @@ eq: 'Y A Y'
 
 
 console.log(ttl('Filters'));
+
+
 
 var data = {mins:150};
 runTest({
