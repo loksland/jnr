@@ -109,7 +109,7 @@ Output supplied minutes as hours to 2 decimal points with `hr/s` appended.
 
 Concatenates string with extra arguments suppplied to the filter.
 ``` 
-{{firstname|concat:'-','surname}}'
+{{firstname|concat:'-',surname}}'
 ```
 ``` 
 Ken-James
