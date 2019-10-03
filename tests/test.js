@@ -3,25 +3,96 @@
 var jnr = require('../jnr');
 
 
-
-
 /*
-var data = {now:new Date()};
+
+var data = {name:'Ken',surname:'Jones'};
 var tpl = `
 
-{{turtles(sentence)}}
+{{name|concat:'-',surname|lowercase}}
 
 `
-
-var result = jnr.render(tpl, data,true);
+var result = jnr.render(tpl, data, {returnData:false});
 console.log('+ + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +')
-console.log(result.rendered);
-console.log(result.data);
+console.log(tpl);
+console.log(result);
 process.exit(1);
 
 */
 
 console.log(ttl('To sort')); 
+
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Filter capture with arguments',
+exp: `{{filter|concat:' Jones'}}Hi {{name}}{{/filter}}`,
+data: data,
+eq: 'Hi Ken Jones'
+});
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Capture set with filter arguments',
+exp: `{{set captureVal=...|concat:' Jones'}}Hi {{name}}{{/set}}{{captureVal}}`,
+data: data,
+eq: 'Hi Ken Jones'
+});
+
+
+var data = {name:'Ken',nameB:'Mary'}
+runTest({
+ttl:'Filter with multiple arguments',
+exp: `{{name|concat:'Dingo','Egg',nameB}}`,
+data: data,
+eq: 'KenDingoEggMary'
+});
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Simple set with filter arguments',
+exp: `{{set myvar=name|concat:'Dingo'}}{{myvar}}`,
+data: data,
+eq: 'KenDingo'
+});
+
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Filter | with ||',
+exp: `{{name=='Ken'||name=='Mary'?'yes':'no'|uppercase}}`,
+data: data,
+eq: 'YES'
+});
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Filter in a bracket',
+exp: '{{(name|uppercase) + \'Surname\'}}',
+data: data,
+eq: 'KENSurname'
+});
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Double question mark string',
+exp: '{{name + \'??what\'}}',
+data: data,
+eq: 'Ken??what'
+});
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Operation strings ',
+exp: '{{name + \'==,!=,>,>=,<,<=\' + "==,!=,>,>=,<,<=" }}',
+data: data,
+eq: 'Ken==,!=,>,>=,<,<===,!=,>,>=,<,<='
+});
 
 var data = {num:30}
 runTest({
@@ -31,11 +102,10 @@ data: data,
 eq: '66'
 });
 
-
 var data = {num:6}
 runTest({
 ttl:'Brackets with filters',
-exp: '{{set num=(60*((num*2+8)/10))(minsToHrs)}}{{num}}',
+exp: '{{set num=(60*((num*2+8)/10))|minsToHrs}}{{num}}',
 data: data,
 eq: '2hrs'
 });
@@ -43,7 +113,7 @@ eq: '2hrs'
 var data = {num:30}
 runTest({
 ttl:'Set with brackets with filters',
-exp: '{{(num-28)*(num+3)-6(minsToHrs)}}',
+exp: '{{(num-28)*(num+3)-6|minsToHrs}}',
 data: data,
 eq: '1hr'
 });
@@ -76,7 +146,7 @@ eq: `"Ken"`
 var data = {name:'Ken',nameB:'Jenny\'s'}
 runTest({
 ttl:'Single quote escaping with slashes',
-exp: '{{name + \' single quote\\\'s \' + nameB}}',
+exp: `{{name + ' single quote\\'s ' + nameB}}`,
 data: data,
 eq: 'Ken single quote\'s Jenny\'s'
 });
@@ -85,9 +155,9 @@ eq: 'Ken single quote\'s Jenny\'s'
 var data = {name:'Ken',nameB:"Jenny\"s"}
 runTest({
 ttl:'Double quote escaping with slashes',
-exp: "{{name + \" double quote\\\"s \" + nameB}}",
+exp: `{{name + " double \\"quote\\" " + nameB}}`,
 data: data,
-eq: "Ken double quote\"s Jenny\"s"
+eq: "Ken double \"quote\" Jenny\"s"
 });
 
 
@@ -103,7 +173,7 @@ eq: '2'
 var data =  {mins:20}
 runTest({
 ttl:'Spacing in expression and filter',
-exp: '{{mins + 100( minsToHrs )}}',
+exp: '{{mins + 100| minsToHrs }}',
 data: data,
 eq: '2hrs'
 })
@@ -111,14 +181,17 @@ eq: '2hrs'
 
 // Custom test
 var title = 'YAML filter - loading inline data and getting data';
-var exp = `{{set myInlineVar=...(yaml)}}
+var exp = `{{set myInlineVar=...|yaml}}
 men: [John Smith, Bill Jones]
 women:
   - Mary Smith
   - {{firstName}} Williams{{/set}}:P`;
 var data = {firstName:'Susan'};
 console.log('\n`'+title+'` test...');
-var result = jnr.render(exp, data, {returnAlteredData:true})
+var result = jnr.render(exp, data, {returnData:true})
+
+console.log(result.data)
+process.exit
 var pass = result.data.myInlineVar.women[1] == 'Susan Williams'
 console.log(data)
 console.log(exp)
@@ -128,6 +201,33 @@ if (!pass){
   throw new Error('Test failed for `'+config.exp+'`');
 }
 
+// Custom test
+jnr.registerFilter('arr', 'oxfordComma', function(arr){
+  var clone = arr.slice(0);
+  if (clone.length > 1){
+    clone[clone.length-1] = 'and ' + clone[clone.length-1];
+  }
+  return clone.join(', ');
+});
+var data = {names:['Fred','Barney','Wilma']}
+runTest({
+ttl:'Register filter',
+exp: '{{names|oxfordComma}}',
+data: data,
+eq: 'Fred, Barney, and Wilma'
+})
+
+
+jnr.registerFilter('arr', 'sep', function(arr, seperator){
+  return arr.join(seperator);
+});
+var data = {names:['Fred','Barney','Wilma']}
+runTest({
+ttl:'Register filter with args',
+exp: '{{names|sep:\'$\'}}',
+data: data,
+eq: 'Fred$Barney$Wilma'
+})
 
 
 var data =  {num:1}
@@ -144,7 +244,7 @@ eq: function(res){
 var data = {title:'Welcome!'}
 runTest({
 ttl:'YAML filter - loading inline data',
-exp: `{{set data=...(yaml)}}
+exp: `{{set data=...|yaml}}
 men: [John Smith, Bill Jones]
 women:
   - Mary Smith
@@ -157,7 +257,7 @@ eq: '#w1:Susan Williams'
 var data = {title:'Welcome!'}
 runTest({
 ttl:'Markdown filter (md) - multiline',
-exp: '{{filter(md)}}### {{title}}\nThis is *rendered* as **HTML**.{{/filter}}',
+exp: '{{filter|md}}### {{title}}\nThis is *rendered* as **HTML**.{{/filter}}',
 data: data,
 eq: '<h3>Welcome!</h3>\n<p>This is <em>rendered</em> as <strong>HTML</strong>.</p>\n'
 })
@@ -165,7 +265,7 @@ eq: '<h3>Welcome!</h3>\n<p>This is <em>rendered</em> as <strong>HTML</strong>.</
 var data = {title:'Welcome'}
 runTest({
 ttl:'Markdown filter (md) - single line',
-exp: '{{filter(md)}}{{title}}, this is *rendered* as **HTML**.{{/filter}}',
+exp: '{{filter|md}}{{title}}, this is *rendered* as **HTML**.{{/filter}}',
 data: data,
 eq: 'Welcome, this is <em>rendered</em> as <strong>HTML</strong>.'
 })
@@ -173,7 +273,7 @@ eq: 'Welcome, this is <em>rendered</em> as <strong>HTML</strong>.'
 var data = {msg:'ok'};
 runTest({
 ttl:'Filter blocks',
-exp: '{{filter(uppercase)}}This should be upper case. {{msg}}{{/filter}}',
+exp: '{{filter|uppercase}}This should be upper case. {{msg}}{{/filter}}',
 data: data,
 eq: 'THIS SHOULD BE UPPER CASE. OK'
 })
@@ -207,7 +307,7 @@ eq: 'ken,barney,'
 var data = {name:'ken'};
 runTest({
 ttl:'Block capture',
-exp: '{{set myvar=...(uppercase)}}My name is {{name}}{{/set}}Uppercase is {{myvar}}',
+exp: '{{set myvar=...|uppercase}}My name is {{name}}{{/set}}Uppercase is {{myvar}}',
 data: data,
 eq: 'Uppercase is MY NAME IS KEN'
 })
@@ -663,7 +763,7 @@ console.log(ttl('Filters'));
 var data = {mins:150};
 runTest({
 ttl:'int: minsToHrs',
-exp: '{{mins(minsToHrs)}}',
+exp: '{{mins|minsToHrs}}',
 data: data,
 eq: '2.5hrs'
 })
@@ -671,25 +771,17 @@ eq: '2.5hrs'
 var data = {cents:1434231};
 runTest({
 ttl:'int: currency',
-exp: '${{cents(currency)}}',
+exp: '${{cents|currency}}',
 data: data,
 eq: '$14,342.31'
 })
 
 
+
 var data = {now:new Date()};
 runTest({
-ttl:'date: ymd',
-exp: '{{now(ymd)}}',
-data: data,
-eq: function(res){
-  return res.length == 10 && res.charAt(4) == '-' && res.charAt(7) == '-';
-}
-})
-
-runTest({
 ttl:'date: readable',
-exp: '{{now(readable)}}',
+exp: '{{now|readable}}',
 data: data,
 eq: function(res){
   return res.length > 10
@@ -699,7 +791,7 @@ eq: function(res){
 var data = {phoneNum:'0412 123 123'};
 runTest({
 ttl:'str: phoneAuHref',
-exp: 'Call me on <a href="{{phoneNum(phoneAuHref)}}" >{{phoneNum}}</a>',
+exp: 'Call me on <a href="{{phoneNum|phoneAuHref}}" >{{phoneNum}}</a>',
 data: data,
 eq: 'Call me on <a href="+6412123123" >0412 123 123</a>'
 })
@@ -707,7 +799,7 @@ eq: 'Call me on <a href="+6412123123" >0412 123 123</a>'
 var data = {phoneNum:'0412 123 123'};
 runTest({
 ttl:'str: slugify',
-exp: 'Call me on {{phoneNum(slugify)}}',
+exp: 'Call me on {{phoneNum|slugify}}',
 data: data,
 eq: 'Call me on 0412-123-123'
 })
@@ -715,12 +807,12 @@ eq: 'Call me on 0412-123-123'
 var data = {phoneNum:'0412 123 123'};
 runTest({
 ttl:'str: nbsp',
-exp: 'Call me on {{phoneNum(nbsp)}}',
+exp: 'Call me on {{phoneNum|nbsp}}',
 data: data,
 eq: 'Call me on 0412&nbsp;123&nbsp;123'
 })
 
-console.log(ttl('Adding filters'));
+
 
 console.log(ttl('Recursive tag identification'));
 

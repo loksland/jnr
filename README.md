@@ -166,34 +166,58 @@ Cart is empty
 ```
 ### Filters 
 
-A filter is a function that modifies the data sent to it. Eg. `{{variable(%filter_name%)}}`.  
+A filter is a function that modifies the data sent to it, filters are separated by the pipe `|` character.   
+`{{variable|filterName}}`
+    
 Filters are applied according to the type of data sent to it.
 
 ```
-{{cents}} cents is {{cents($currency)}}
+{cents:1012344}
+```
+
+```
+{{cents}} cents is {{cents|$currency}}
 ```
 
 ```
 1012344 cents is $10,123.44
 ```
 
-Separate successive filters with a comma `,` and they will be applied in order.
+Separate successive filters with pipe char `|` and they will be applied in order.
 
 ```
-{{message(uppercase,hyphenate)}}
+{{message|uppercase|hyphenate)}}
 ```
 ```
 GREEN-EGGS-AND-HAM
 ```
 
-Read more advanced filter operations [here](docs/filters.md).
+Extra arguments can be supplied to the filter using the following format:  
+
+`{{variable|filterName1:extraArg1,extraArg2|filterName2:extraArg1,extraArg2}}`
+ 
+Eg:
+```
+{name:'Ken',surname:'Jones'}}
+```
+
+```
+{{name|concat:'-',surname|lowercase}}
+```
+
+```
+ken-jones
+```
+
+
+Read more about filters [here](docs/filters.md).
 
 ### Filtering output 
 
-Output blocks can have a filter applied using the `filter(%filter_name%)` tag.
+Output blocks can have a filter applied using the `filter|%filter_name%` tag.
 
 ```
-{{filter(md)}}
+{{filter|md}}
 ### {{title}}
 This is *rendered* as **HTML**.
 {{/filter}}
@@ -239,10 +263,10 @@ Total: $9.08
 ```
 
 ### Capturing blocks
-Blocks of the template can be captured to a variable using `set %var_name%=...(%filters%)`.
+Blocks of the template can be captured to a variable using `set %var_name%=...|%filters%`.
 
 ```
-{{set receipt=...(uppercase)}}
+{{set receipt=...|uppercase}}
   {{set cart_total=0}}
   {{each cart as index,item}}
     {{set cart_total=cart_total + item.price}}
@@ -263,10 +287,10 @@ TOTAL IS $9.08
 
 ### Loading data from template 
 
-Access to variables set in the template can be obtained by using the option property `returnAlteredData`. 
+Access to variables set in the template can be obtained by using the option property `returnData`. 
 
 ```node 
-jnr.render(template, data, {returnAlteredData:true})
+jnr.render(template, data, {returnData:true})
 ```
 
 If set to true the function will return an object with 2 properties:
@@ -274,7 +298,7 @@ If set to true the function will return an object with 2 properties:
 - `render.data` a copy of the supplied data object including any `set` variables
 
 ``` 
-{{set inlineMeta=...(yaml)}}
+{{set inlineMeta=...|yaml}}
 men: [John Smith, Bill Jones]
 women:
   - Mary Smith
@@ -283,7 +307,7 @@ women:
 ```
 
 ```node
-var result = jnr.render(exp, data, {returnAlteredData:true});
+var result = jnr.render(exp, data, {returnData:true});
 console.log(result.data.inlineMeta.men[1]);
 ```
 
@@ -306,6 +330,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.13 - Filter syntax change to pipes, filter arguments enabled, docs updated.
 - v0.1.12 - Major update, set, set capture blocks, deep eval, documentation update.
 - v0.1.10 - Switched to async file operations
 - v0.1.7 - Improved documentation

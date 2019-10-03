@@ -7,38 +7,9 @@
 
 var fs = require('fs');
 var path = require('path');
-var moment = require('moment');
-var yaml = require('js-yaml');
-var safeEval = require('safe-eval')
-
-
-
-// https://markdown-it.github.io/
-// full options list (defaults)
-var md = require('markdown-it')({
-  html:         true,        // Enable HTML tags in source
-  xhtmlOut:     false,        // Use '/' to close single tags (<br />).
-                              // This is only for full CommonMark compatibility.
-  breaks:       false,        // Convert '\n' in paragraphs into <br>
-  langPrefix:   'language-',  // CSS language prefix for fenced blocks. Can be
-                              // useful for external highlighters.
-  linkify:      true,        // Autoconvert URL-like text to links
- 
-  // Enable some language-neutral replacement + quotes beautification
-  typographer:  true,
- 
-  // Double + single quotes replacement pairs, when typographer enabled,
-  // and smartquotes on. Could be either a String or an Array.
-  //
-  // For example, you can use '«»„“' for Russian, '„“‚‘' for German,
-  // and ['«\xA0', '\xA0»', '‹\xA0', '\xA0›'] for French (including nbsp).
-  // quotes: '“”‘’',
- 
-  // Highlighter function. Should return escaped HTML,
-  // or '' if the source string is not changed and should be escaped externally.
-  // If result starts with <pre... internal wrapper is skipped.
-  // highlight: function (/*str, lang*/) { return ''; }
-});
+var filter = require('./filter');
+var utils = require('./utils');
+var safeEval = require('safe-eval');
 
 var TPL_TAG_OPEN = TPL_TAG_OPEN_DEFAULT = '{{'; // Can be the same char
 var TPL_TAG_CLOSE = TPL_TAG_CLOSE_DEFAULT = '}}'; // Can be the same char
@@ -46,18 +17,21 @@ var TPL_TAG_CLOSE = TPL_TAG_CLOSE_DEFAULT = '}}'; // Can be the same char
 var TPL_TAG_OPEN_REGSAFE = escapeRegex(TPL_TAG_OPEN);
 var TPL_TAG_CLOSE_REGSAFE = escapeRegex(TPL_TAG_CLOSE);
 
-function Jnr(){
+function jnr(){
 }
 
-// - `returnAlteredData` if set to true, instead of returning rendered object will return obj and the data
-// {rendered:obj, data:obj}
-Jnr.render = Jnr.apply = function(obj, data, options = {}){
+jnr.registerFilter = filter.registerFilter;
+
+// |options| (optional object)
+// - `returnData` if set to true, instead of returning rendered object will return obj and the data
+//   {rendered:obj, data:obj}
+jnr.render = function(obj, data, options = {}){
   
   var _data = dupe(data); // Create a duplicate data to work with
   
   var rendered = renderTemplate(obj, _data);
   
-  if (options.returnAlteredData){ // This can be used to access the result of `set` calls.
+  if (options.returnData){ // This can be used to access the result of `set` calls.
     return {rendered:rendered, data:_data};
   }
 	return rendered;
@@ -65,7 +39,7 @@ Jnr.render = Jnr.apply = function(obj, data, options = {}){
 
 // Can be the same char
 // Set to null to reset to default
-Jnr.setTags = function(tagOpen, tagClose){
+jnr.setTags = function(tagOpen, tagClose){
 
 	TPL_TAG_OPEN = (typeof tagOpen === 'string' && tagOpen.length > 0) ? tagOpen : TPL_TAG_OPEN_DEFAULT;
 	TPL_TAG_CLOSE = (typeof tagClose === 'string' && tagClose.length > 0) ? tagClose : TPL_TAG_CLOSE_DEFAULT;
@@ -99,8 +73,7 @@ function renderTemplate(obj, data){
 	} else if (typeof obj !== 'string'){
 
     throw new Error('Unkown object.');
-		//return obj;
-
+		
 	}
 
 	// String
@@ -118,9 +91,10 @@ function renderTemplate(obj, data){
 		delete data._logic_blocks;
 	}
   
-  //if (returnAlteredData){
-  //  return {result:str, data:obj}
-  //}
+  if (typeof data._tmp_vars !== 'undefined'){
+		delete data._tmp_vars;
+	}
+  
 	return str;
 
 }
@@ -133,6 +107,10 @@ function renderTemplateString(str, data){
 	
 	if (data._logic_blocks == undefined){
 		data._logic_blocks = [];
+	}
+  
+  if (data._tmp_vars == undefined){
+		data._tmp_vars = [];
 	}
 
 	var preStr = str;
@@ -160,7 +138,7 @@ function renderTemplateString(str, data){
 	// Simple set 
 	// ----------
 	
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)\\=(?:(?!\\.\\.\\.))(.*?)(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE;
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=(?:(?!\\.\\.\\.))(.*?)'+TPL_TAG_CLOSE_REGSAFE;
 	var regex = new RegExp(regexStr, 'gim');
   
 	var origStr = str;
@@ -177,12 +155,12 @@ function renderTemplateString(str, data){
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = m[1];
 			block.captureContents = false;
-      block.expressionContents = m[2] + (m[3] ? m[3] : ''); // m[3] is the filter including brackets
-			block.captureFilterListStr = false; // Remove brackets
-			block.output = false;
-			
+      block.expressionContents = m[2]; 
+			block.captureFilterListStr = false;  // Filter is included in block.expressionContents for simple setTags
+      block.output = false;			
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
+      
 
 			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
 			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
@@ -194,41 +172,43 @@ function renderTemplateString(str, data){
 	// Filter block
 	// ------------
 	// Just like a set capture block though is outputted immediately
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'filter(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE, 'gim');
-	
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'filter(\\|.*?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE
+	var regex = new RegExp(regexStr, 'gim') 
+  // TPL_TAG_OPEN_REGSAFE + 'filter(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+
 	var origStr = str;
 	var m;
 	var indexOffset=0;
 	while ((m = regex.exec(origStr)) !== null) {
 
-			if (m.index === regex.lastIndex) {
-					regex.lastIndex++;
-			}
+      if (m.index === regex.lastIndex) {
+          regex.lastIndex++;
+      }
 
 			var block = {};
-			
+      
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = false;
-			block.captureFilterListStr = (!m[1] || m[1].trim() == '()') ? '' : m[1].substr(1, m[1].length-2); // Remove brackets
+			block.captureFilterListStr = m[1] == undefined ? false : m[1] // Pipe at char 0
 			block.captureContents = m[2];
       block.expressionContents = false;
 			block.output = true;
 			
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
-
-			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
+      
 			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
 			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
 			indexOffset += String(val).length - m[0].length;
 			
 	}
-	
+  
 	// Set capture block
 	// -----------------
+  
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=\\.\\.\\.(\\|.*?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
+	var regex = new RegExp(regexStr, 'gim');
 
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'set ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)\\=\\.\\.\\.(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE, 'gim');
-	
 	var origStr = str;
 	var m;
 	var indexOffset=0;
@@ -242,13 +222,14 @@ function renderTemplateString(str, data){
 			
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = m[1];
-			block.captureFilterListStr = (!m[2] || m[2].trim() == '()') ? '' : m[2].substr(1, m[2].length-2); // Remove brackets
+			block.captureFilterListStr = m[2] == undefined ? false : m[2] // Pipe at char 0
 			block.captureContents = m[3];
       block.expressionContents = false;
 			block.output = false;
 			
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
+
 
 			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
 			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
@@ -260,7 +241,7 @@ function renderTemplateString(str, data){
 	// Each loops
 	// ----------
 
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'each ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+) as ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' ]*)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/each'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'each ([^ ]+) as ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' ]*)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/each'+TPL_TAG_CLOSE_REGSAFE, 'gim');
 
 	var origStr = str;
 	var m;
@@ -306,7 +287,7 @@ function renderTemplateString(str, data){
 	// --------------------
 	
 	var origStr = str;
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'if ([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)(?:'+TPL_TAG_OPEN_REGSAFE+'else'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?))*'+TPL_TAG_OPEN_REGSAFE+'\/if'+TPL_TAG_CLOSE_REGSAFE, 'gim');
+	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + 'if (.+?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)(?:'+TPL_TAG_OPEN_REGSAFE+'else'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?))*'+TPL_TAG_OPEN_REGSAFE+'\/if'+TPL_TAG_CLOSE_REGSAFE, 'gim');
 	
 	var m;
 	var indexOffset = 0;
@@ -368,7 +349,7 @@ function renderTemplateString(str, data){
 	// ------------------------------------
 	
 	var result = str;
-	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/][^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+']+)'+TPL_TAG_CLOSE_REGSAFE;
+	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/].+?)'+TPL_TAG_CLOSE_REGSAFE;
 	var regex = new RegExp(regexStr, 'gim');
 	
 	// - Don't match expressions with a / at the start to avoid matiching /if /each 
@@ -393,11 +374,23 @@ function renderTemplateString(str, data){
 					
           var _val;
           if (block.expressionContents !== false){ // One line set call, parse expression to retain data type of results
+            
             _val = parseTemplateExpression(block.expressionContents, data);
+          
           } else if (block.captureContents !== false){ // Capture block, result will always be a string
-            _val = applyFilters(renderTemplateString(block.captureContents, data), block.captureFilterListStr);	
+            
+            var _contents = renderTemplateString(block.captureContents, data)
+            
+            if (block.captureFilterListStr !== false){
+              // Hand off to `parseTemplateExpression` to handle filter processing
+              data._tmp_vars.push(_contents);
+              _val = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ block.captureFilterListStr, data)
+            } else {
+              _val = _contents;
+            }
+            
           } else {
-            throw new Error('Invalid set encountered.')
+            throw new Error('Invalid set tag encountered.');
           }
           
 					if (block.setVarPath !== false){
@@ -434,21 +427,21 @@ function renderTemplateString(str, data){
 					var saveExistingloopPropKeyAlias;
 					var saveExistingloopPropObjIndexAlias
 
-					if (getObjPath(data, block.loopPropValAlias) != undefined){
+					if (utils.getObjPath(data, block.loopPropValAlias) != undefined){
 						// Save existing prop, overwrite and restore later
-						saveExistingloopPropValAlias = getObjPath(data, block.loopPropValAlias);
+						saveExistingloopPropValAlias = utils.getObjPath(data, block.loopPropValAlias);
 					}
 
 					var keyAliasSet = block.loopPropKeyAlias != undefined;
-					if (keyAliasSet && getObjPath(data, block.loopPropKeyAlias) != undefined){
+					if (keyAliasSet && utils.getObjPath(data, block.loopPropKeyAlias) != undefined){
 						// Save existing prop, overwrite and restore later
-						saveExistingloopPropKeyAlias = getObjPath(data, block.loopPropKeyAlias);
+						saveExistingloopPropKeyAlias = utils.getObjPath(data, block.loopPropKeyAlias);
 					}
 
 					var objIndexSet = block.loopPropObjIndexAlias != undefined;
-					if (objIndexSet && getObjPath(data, block.loopPropObjIndexAlias) != undefined){
+					if (objIndexSet && utils.getObjPath(data, block.loopPropObjIndexAlias) != undefined){
 						// Save existing prop, overwrite and restore later
-						saveExistingloopPropObjIndexAlias = getObjPath(data, block.loopPropObjIndexAlias);
+						saveExistingloopPropObjIndexAlias = utils.getObjPath(data, block.loopPropObjIndexAlias);
 					}
 
 					var loopSubject = parseTemplateExpression(block.loopSubject, data)
@@ -524,70 +517,152 @@ function renderTemplateString(str, data){
 
 }
 
-var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
-
+//var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
+var BRACKET_IN_ESCAPE = '__brIn'; 
+var BRACKET_OUT_ESCAPE = '__brOut';
+var OR_ESCAPE = '__or'
 function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
-  exp = String(exp).trim(); // May not be string?
+  exp = String(exp).trim(); 
 	var origExp = exp;
   
-	var props;
-	var m;
+  // 1) Filters are considered first unless wrapped in brackets
+  // - Defer ternary operations to eval
+  // - Defer logical operations to eval
+  // - Defer ! to eval
 
-	var exp = exp.split('??').join('___optionalchain___'); // Remove `??` so ternary can be interpretted
-
-	if ((m = new RegExp(/^([^\s]+)\?{1}([^\s?]+)\:([^\s?]+)$/im).exec(exp)) !== null) {
-
-			// Ternary logic
-			var conditional = m[1].split('___optionalchain___').join('??');
-			var conditionalResult = parseTemplateExpression(conditional, data, true); // Interpret as it's own expression, resolveOptionalsToBoolean
-
-			if (conditionalResult === true){
-				exp = m[2];
-			} else if (conditionalResult === false){
-				exp = m[3];
-			} else {
-				throw new Error('Ternary subject `'+conditional+'` must resolve to boolean only, got `'+conditionalResult+'` (type:'+typeof conditionalResult+')');
-			}
-
-	}
-
-	exp = exp.split('___optionalchain___').join('??');
-
-
-	// Equation
-
-	for (var i = 0 ; i < RELATIONAL_OPERATORS.length; i++){
-
-		var operator = RELATIONAL_OPERATORS[i];
-		var eqParts = exp.split(operator);
-
-		if (eqParts.length > 1){
+  // 1) Replace string constants with vars, they may contain chars that break parsing
+  // Supports double and single quotes as well as escaped chars
+  
+  if (exp.includes(`'`) || exp.includes(`"`)){ // Pre check to quickly bypass non-targeted expressions
       
-      
+    var regex = new RegExp(/("[^"\\]*(?:\\.[^"\\]*)*")|(\'[^\'\\]*(?:\\.[^\'\\]*)*\')/gi);
+    
+    var startingExp = exp;
+    var m;
+    var indexOffset = 0;
+    while ((m = regex.exec(startingExp)) !== null) {
 
-			if (eqParts.length != 2){
-				throw new Error('Invalid relational operator `'+exp+'`');
-			}
+        if (m.index === regex.lastIndex) {
+            regex.lastIndex++;
+        }
+        
+        var isDoubleQuote = m[1] != undefined;
+        var strContent = isDoubleQuote ? m[1] : m[2];        
+        var content = strContent.substr(1,strContent.length-2);
+        
+        // Escape sequences can be safely removed now.
+        if (isDoubleQuote){
+          content = content.split('\\"').join('"')
+        } else {
+          content = content.split("\\'").join("'")
+        }
+        data._tmp_vars.push(content);
+        
+        var val = '_tmp_vars[' + String(data._tmp_vars.length-1) + ']' // Use square brackets as result will be evaled
+        exp = exp.substr(0, m.index+indexOffset) + val + exp.substr(m.index+indexOffset + m[0].length);
+        indexOffset += String(val).length - m[0].length;
+        
+    }
+    
+  }
+  
+  // Now string constants are gone remove all spacing from expression 
+  
+  exp = exp.replace(/\s/g, '')
+  // Escape or || chars to enable parse single filter pipes 
+  
+  exp = exp.replace(/\|\|/g, OR_ESCAPE);
+  
+  // 2) Seach for a filter inside a top level bracket.
+  //    - Weed out simple brackets, looking for filter pipes.
+  
+  if (exp.includes(`|`) && exp.includes(`(`)){ // Pre check to quickly bypass non-targeted expressions
+    
+    var regex = new RegExp(/(\([^()|]*\))|(\([^()]*\))/gi);
+    
+    var keepLooping = true;
+    
+    while(keepLooping){
+    
+      var startingExp = exp;
+      var m;
+      var indexOffset = 0;
+      while ((m = regex.exec(startingExp)) !== null) {
 
-			var partA = parseTemplateExpression(eqParts[0], data)
-			var partB = parseTemplateExpression(eqParts[1], data);
+          if (m.index === regex.lastIndex) {
+              regex.lastIndex++;
+          }
+          
+          if (m[1] !== undefined){
+            // Found a simple bracket, replace with placeholder char
+            var val = BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2) + BRACKET_OUT_ESCAPE
+          } else {
+            // Found a bracket containing a top level filter, process this separately
+            var bracketExp = m[2].substr(1,m[2].length-2);
+            data._tmp_vars.push(parseTemplateExpression(bracketExp, data));
+            
+            var val = '_tmp_vars[' + String(data._tmp_vars.length-1) + ']' // Use square brackets as result will be evaled;
+          }
+          
+          exp = exp.substr(0, m.index+indexOffset) + val + exp.substr(m.index+indexOffset + m[0].length);
+          indexOffset += String(val).length - m[0].length;
+          
+      }
       
-			if (operator == '==') {
-				return partA == partB;
-			} else if (operator == '!=') {
-				return partA != partB;
-			} else if (operator == '>') {
-				return partA > partB;
-			} else if (operator == '<') {
-				return partA < partB;
-			} else if (operator == '>=') {
-				return partA >= partB;
-			} else if (operator == '<=') {
-				return partA <= partB;
-			}
-		}
-	}
+      keepLooping = exp != startingExp;
+    
+    }
+  }
+  
+  
+  // Resolve each filter expression separately as their own call to this function
+  // Rolling the result to be processed on the next filter.
+  // -----------------------------------------------------------------
+  
+  var filterSequence = exp.split('|');  
+  if (filterSequence.length > 1){
+    
+    var rollingResult = undefined;    
+    for (var i = 0; i < filterSequence.length; i++){
+      
+      if (i == 0){ // Index 0 will *usually* contain the seed value        
+        rollingResult = parseTemplateExpression(filterSequence[i], data);
+        //try {        
+        //  
+        //} catch(e){
+        //  // It is possible, if index 0 doens't resolve that index 0 is a filter name, that takes undefined as it's rolling value.
+        //}        
+      } else {
+        // Interpret the filter:
+        // `filterName:arg2,arg3`
+        var filterParts = filterSequence[i].split(':');
+        var filterName = filterParts[0];
+        // Parse each extra arg
+        var filterArgs = [rollingResult]
+        if (filterParts.length > 1){
+          filterArgs = filterArgs.concat(filterParts[1].split(','));
+          for (var j = 1; j < filterArgs.length; j++){
+            filterArgs[j] = parseTemplateExpression(filterArgs[j], data);  // Result each arg      
+          }        
+        }
+        rollingResult = filter.applyFilter(filterName, filterArgs);  
+      }
+      
+    }
+    
+    return rollingResult;
+    
+  }
+
+  // Single expression parsing 
+  // -------------------------
+  
+  // Replace escaped chars with real ones.
+
+  exp = exp.split(BRACKET_IN_ESCAPE).join('(')
+  exp = exp.split(BRACKET_OUT_ESCAPE).join(')')
+  exp = exp.split(OR_ESCAPE).join('||')
 
 	var isNot = false;
 	if (exp.length > 0){
@@ -610,6 +685,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 	// Optional chain
 	props = exp.split('??');
 	
+
 	var result;
 
 	// Search optional props in order
@@ -619,17 +695,8 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
     
 		// Find filters
 		
-		var filters = '';
-		var m;
-    // Match valid filter names, no spaces in trailing brackets at end of string
-		if ((m = new RegExp(/\( *([a-zA-Z_$][0-9a-zA-Z_$]+ *(?:, *[a-zA-Z_$][0-9a-zA-Z_$]+)?) *\)$/i).exec(prop)) !== null) {
-				prop = prop.substr(0, prop.length - m[0].length);
-				filters = m[1]; //.split(',');
-		}
-
-		// Loop possible prop names in prop and inject value if found.
-		
-    result = getObjPath(data, prop);
+    // Try resolving expression as var name
+    result = utils.getObjPath(data, prop);
     
 		if (result == undefined){ // Try evaluating
       
@@ -642,13 +709,13 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
       }
       
 		}
-
+    
+    
 		if (result != undefined){      
-			// Apply filters
-			result = applyFilters(result, filters);
+			// Found a result, exit optional search loop
 			break;
-
 		}
+    
 	}
 
 	if (isOptional){
@@ -666,6 +733,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 	} else {
 
 		if (result == undefined){
+      console.log(exp)
 			throw new Error('Couldn\'t resolve template expression `'+origExp+'`');
 		}
 
@@ -688,231 +756,8 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 
-// Filters
-// -------
-
-var FILTERS = {};
-FILTERS['*'] = {};
-
-FILTERS.arr = {};
-
-FILTERS.arr.sentence = function(arr){
-  var result = [];
-  for (var i = 0; i < arr.length; i++){
-    if (i > 0){
-      result.push(i == arr.length-1 ? ' and ' : ', ');
-    }
-    result.push(arr[i])
-  }
-  return result.join('');
-};
-
-FILTERS.obj = {};
-
-FILTERS.str = {};
-
-FILTERS.str.md = function(str){
-	
-	return str.split('\n').length == 1 ? md.renderInline(str) : md.render(str);
-	
-}
-
-FILTERS.str.yaml = function(str){
-  
-  try {
-    return yaml.safeLoad(str);
-  } catch (e) {
-    throw e;
-  }
-  
-  return null
-  
-}
-
-// Lowercase, replace spacing with hyphens.
-FILTERS.str.slugify = function(str){
-	return str.toLowerCase().replace(new RegExp(/\s+/igm), '-');
-}
-//Eg. `0412 123 123` to `+6412123123`
-FILTERS.str.phoneAuHref = function(str){
-	str = str.replace(new RegExp(/\s+/igm), '');
-	if (str.length == 0 || str.charAt(0) != '0'){
-		throw new Error('Filter `phoneAuHref` encountered invalid phone number `'+str+'`');
-	}
-	return '+6' + str.substr(1);
-}
-
-FILTERS.str.nbsp = function(str){
-	return str.replace(new RegExp(/\s+/igm), '&nbsp;');
-}
-
-FILTERS.str.uppercase = function(str){
-	return str.toUpperCase();
-}
-
-FILTERS.str.lowercase = function(str){
-	return str.toLowerCase();
-}
-
-FILTERS.str.hyphenate = function(str){
-	return str.replace(new RegExp(/\s+/igm), '-');
-}
-FILTERS.int = {};
-FILTERS.int.currency = function(cents){
-
-	var str = String(cents);
-
-	while(str.length < 3){
-		str = '0' + str;
-	}
-
-	var cents = str.substr(-2);
-	var dollars = str.substr(0, str.length-2);
-
-	var thousandChunks = [];
-	var chunk = '';
-	for (var i = dollars.length-1; i >=0; i--){
-		chunk+=dollars.charAt(i);
-		if (chunk.length == 3 || (i == 0 && chunk.length > 0)){
-			thousandChunks.push(chunk.split('').reverse().join(''));
-			chunk = '';
-		}
-	}
-
-	return thousandChunks.reverse().join(',') + '.' + cents;
-
-}
-// Like currency though for dollar
-FILTERS.int.currencyx100 = function(dollars){
-
-	return FILTERS.int.currency(Math.round(dollars*100));
-
-}
-FILTERS.int.$currency = function(cents){
-
-	return '$' + FILTERS.int.currency(cents);
-
-}
-FILTERS.int.minsToHrs = function(mins){
-
-	var hrs = Math.round((mins/60)*100)/100;
-	var parts = String(hrs).split('.');
-
-	var hrsStr = parts[0];
-	if (parts.length > 1){
-		var minsStr = parts[1];
-		if (minsStr.length > 2){
-			minsStr = minsStr.substr(0,2);
-		}
-		hrsStr += '.' + minsStr;
-	}
-
-	var isPlural = mins==60;
-	return hrsStr + 'hr' + (isPlural ? '' : 's');
-
-	return hrsStr;
-
-}
-FILTERS.date = {};
-// https://momentjs.com/docs/#/displaying/
-FILTERS.date.ymd = function(date){
-	return moment(date).format('YYYY-MM-DD');
-}
-FILTERS.date.display = function(date){
-	return moment(date).format('DD.MM.YYYY');
-}
-FILTERS.date.readable = function(date){
-	return moment(date).format('MMMM Do YYYY, h:mm:ssa');
-}
-
-
-// |dataType| options are 'date','str','float','int'
-// Will overwrite existing
-Jnr.registerFilter = function(dataType, filterName, filterFn) {
-
-	if (!FILTERS[dataType]) {
-		throw new Error('Data type `'+dataType+'` not found.')
-	}
-	FILTERS[dataType][filterName] = filterFn;
-
-}
-
-// Param `filters` is a string without brackets of filter names separated by commas.
-// If filterList is set to '' then no filters present
-function applyFilters(obj, filterList){
-	
-	if (filterList.length == 0){
-		return obj;
-	}
-	
-	var filterArr = filterList.split(' ').join('').split(','); // Remove spaces
-	
-	for (var i = 0; i < filterArr.length; i++){
-		var filterName = filterArr[i];
-		obj = applyFilter(obj, filterName);
-	}
-	
-	return obj;
-
-}
-
-function applyFilter(obj, filterName){
-
-	// Any type filters get precedence
-	var filterFn = getObjPath(FILTERS, '*.'+filterName);
-	if (typeof filterFn == 'function'){
-		return filterFn(obj);
-	}
-
-	var typeKey = '';
-
-	if (Array.isArray(obj)) {
-		typeKey = 'arr';
-	} else if (typeof obj == 'object' && typeof obj.getMonth === 'function') {
-		typeKey = 'date';
-	} else if (typeof obj == 'string'){
-
-		var filterMayBeDate = false;
-		for (var p in FILTERS.date){
-			if (p == filterName){
-				filterMayBeDate = true;
-				break;
-			}
-		}
-
-		if (filterMayBeDate && moment(obj).isValid()){
-			obj = moment(obj).toDate();
-			typeKey = 'date';
-		} else {
-			typeKey = 'str'
-		}
-	} else if (typeof obj == 'number'){
-		if (String(obj).split('.').length > 1){
-			typeKey = 'float'
-		} else {
-			typeKey = 'int';
-		}
-	} else if (typeof obj == 'object'){
-		typeKey = 'obj';
-	}
-
-	if (typeKey.length == 0){ // Type not found
-		return obj;
-	}
-
-	var filterFn = getObjPath(FILTERS, typeKey+'.'+filterName);
-	if (typeof filterFn != 'function'){
-		throw new Error('Filter `'+filterName+'` not found on type `'+typeKey+'`');
-	}
-
-	return filterFn(obj);
-
-}
-
-// ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
-
-// Obj utils
-// ---------
+// Utils
+// -----
 
 function setObjPathVal(obj, path, val){
 
@@ -932,87 +777,6 @@ function setObjPathVal(obj, path, val){
 
 }
 
-function getObjPath(obj, path){
-
-	var ref = obj;
-	var pathParts = path.split('.');
-
-	for (var i = 0; i < pathParts.length; i++){
-
-		var path = pathParts[i]
-
-		if (ref[path] == undefined) {
-
-			// Return object length
-			if (path == 'length' && isNonArrObj(ref)) {
-				var k = 0;
-				for (var p in ref){
-					k++;
-				}
-				return k;
-			}
-
-			// Return array by [index]
-			if (path.charAt(path.length-1) == ']' && path.split('[').length == 2){
-				var parts = path.split('[');
-				var index = parts[1].substr(0, parts[1].length-1);
-				if (index >= 0 && ref[parts[0]] != undefined && Array.isArray(ref[parts[0]]) && ref[parts[0]].length > index) {
-					return ref[parts[0]][index];
-				}
-			}
-
-			return undefined;
-
-		}
-		ref = ref[path];
-
-		if (i == pathParts.length - 1){
-
-			return ref; // Made it to end
-		}
-	}
-
-	return undefined;
-
-}
-
-// ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
-
-// Utils
-// -----
-
-Jnr.trace = function(obj, clipPaths){
-
-	clipPaths = typeof clipPaths !== 'undefined' ? clipPaths : []; // Optional param
-
-	var objDupe = dupe(obj);
-
-	var clipLen = 30;
-
-	for (var i = 0; i < clipPaths.length; i++){
-
-		var clipPathParts = clipPaths[i].split('.');
-		var ref = objDupe;
-		for (var j = 0; j < clipPathParts.length; j++){
-
-			if (isNonArrObj(ref[clipPathParts[j]])){
-				ref = ref[clipPathParts[j]];
-
-			} else if (j == clipPathParts.length-1){
-
-				if (ref[clipPathParts[j]].length > clipLen){
-					ref[clipPathParts[j]] = ref[clipPathParts[j]].substr(0, clipLen) + '...';
-				}
-
-			}
-		}
-	}
-
-  
-	console['log'](JSON.stringify(objDupe, null, 2));
-
-};
-
 function dupe(obj){
 	return JSON.parse(JSON.stringify(obj));
 }
@@ -1026,14 +790,12 @@ function isNonArrObj(obj){
 }
 
 function escapeRegex(str){
-
   return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
-
 }
 
-module.exports = Jnr;
+module.exports = jnr;
 
-Jnr.__express = function(path, options, callback) {
+jnr.__express = function(path, options, callback) {
 
 	fs.readFile(path, 'utf8', function read(err, data) {
 	  if (err) {

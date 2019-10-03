@@ -10,6 +10,19 @@ FILTERS NEED TAKE ARGUMENTS
 {{var.path|filterA:argA|filterB:argC|filterF:argB,'constant',argF+243}}   
 Accept eval
 
+
+{{filter|caps|sads|sdsd}}
+
+{{/filter}}
+
+
+
+{{var.path|filterA:argA|filterB:argC|filterF:argB,'constant',argF+243}}   
+
+
+
+
+
 Call filter as first expression
 {{filterA:'43'}} <- First filter arg will be null
 {{filterA}} <- just call a filter with no arg
