@@ -2,32 +2,7 @@
 Remove whitespace
 
 
-FILTERS NEED TAKE ARGUMENTS
-- Separate filters to new .js src file
 
-
-
-{{var.path|filterA:argA|filterB:argC|filterF:argB,'constant',argF+243}}   
-Accept eval
-
-
-{{filter|caps|sads|sdsd}}
-
-{{/filter}}
-
-
-
-{{var.path|filterA:argA|filterB:argC|filterF:argB,'constant',argF+243}}   
-
-
-
-
-
-Call filter as first expression
-{{filterA:'43'}} <- First filter arg will be null
-{{filterA}} <- just call a filter with no arg
-
-jnr.render can accept option of filters to apply to the result?
 
 PROMISES, and:
 

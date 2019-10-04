@@ -25,16 +25,20 @@ jnr.registerFilter = filter.registerFilter;
 // |options| (optional object)
 // - `returnData` if set to true, instead of returning rendered object will return obj and the data
 //   {rendered:obj, data:obj}
+// - `filter` Top level filter will be applied to the top level template.
+// - `stringFilter` Global string filter string sequence will be applied to every string that is rendered.
+
 jnr.render = function(obj, data, options = {}){
   
   var _data = dupe(data); // Create a duplicate data to work with
   
-  var rendered = renderTemplate(obj, _data);
+  var rendered = renderTemplate(obj, _data, options.filter, options.stringFilter);
   
   if (options.returnData){ // This can be used to access the result of `set` calls.
     return {rendered:rendered, data:_data};
   }
 	return rendered;
+  
 }
 
 // Can be the same char
@@ -52,50 +56,77 @@ jnr.setTags = function(tagOpen, tagClose){
 
 // Template
 // --------
-function renderTemplate(obj, data){
+function renderTemplate(obj, data, topLevelFilter = null, globalStringFilter = null){
 
 	// Apply recursively looking for string data
-
+  
+  
+  if (data._logic_blocks == undefined){
+		data._logic_blocks = [];
+	}
+  
+  if (data._tmp_vars == undefined){
+		data._tmp_vars = [];
+	}
+  
 	if (isNonArrObj(obj)){
 
 		obj = dupe(obj); // Duplicate the template to keep original
 		for (var p in obj){
-			obj[p] = renderTemplate(obj[p], data);
+			obj[p] = renderTemplate(obj[p], data, null, globalStringFilter);
 		}
 
 	} else if (Array.isArray(obj)){
 
 		obj = dupe(obj); // Duplicate the template to keep original
 		for (var i = 0 ; i < obj.length; i++){
-			obj[i] = renderTemplate(obj[i], data);
+			obj[i] = renderTemplate(obj[i], data, null, globalStringFilter);
 		}
 
 	} else if (typeof obj !== 'string'){
 
-    throw new Error('Unkown object.');
-		
+    // Probably a primitive data type, leave alone
+		return obj; 
+    
 	}
 
 	// String
-
-	var keepLooping = true;
-	var str = obj;
-	
-	while (keepLooping){
-		var strPreApply = str;
-		str = renderTemplateString(strPreApply, data);
-		keepLooping = str != strPreApply;
-	}
   
-  if (typeof data._logic_blocks !== 'undefined'){
-		delete data._logic_blocks;
-	}
+  if (typeof obj == 'string') {
+    
+  	var keepLooping = true;
+  	var str = obj;
+  	
+  	while (keepLooping){ // Keep looping until no change in string
+  		var strPreApply = str;
+  		str = renderTemplateString(strPreApply, data);
+  		keepLooping = str != strPreApply;
+  	}
+    
+    if (globalStringFilter && typeof globalStringFilter == 'string'){
+      if (globalStringFilter.charAt(0) != '|'){ // Ensure leading pipe
+        globalStringFilter = '|' + globalStringFilter;
+      }
+      data._tmp_vars.push(str);
+      str = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ globalStringFilter, data)
+    }
+    
+    obj = str;
+    
+  }
   
-  if (typeof data._tmp_vars !== 'undefined'){
-		delete data._tmp_vars;
-	}
+  if (topLevelFilter && typeof topLevelFilter == 'string'){
+    if (topLevelFilter.charAt(0) != '|'){ // Ensure leading pipe
+      topLevelFilter = '|' + topLevelFilter;
+    }
+    data._tmp_vars.push(obj);
+    obj = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ topLevelFilter, data)
+  }
   
-	return str;
+  delete data._logic_blocks;
+	delete data._tmp_vars;
+  
+	return obj;
 
 }
 
@@ -105,14 +136,6 @@ var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 
 function renderTemplateString(str, data){
 	
-	if (data._logic_blocks == undefined){
-		data._logic_blocks = [];
-	}
-  
-  if (data._tmp_vars == undefined){
-		data._tmp_vars = [];
-	}
-
 	var preStr = str;
 	
 	// Comment blocks
@@ -521,6 +544,8 @@ function renderTemplateString(str, data){
 var BRACKET_IN_ESCAPE = '__brIn'; 
 var BRACKET_OUT_ESCAPE = '__brOut';
 var OR_ESCAPE = '__or'
+var COMMA_IN_SIMPLE_BRACKET_ESCAPE = '__brComma';
+
 function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
   exp = String(exp).trim(); 
@@ -570,7 +595,8 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
   // Now string constants are gone remove all spacing from expression 
   
   exp = exp.replace(/\s/g, '')
-  // Escape or || chars to enable parse single filter pipes 
+  
+  // Escape || chars to enable parse single filter pipes 
   
   exp = exp.replace(/\|\|/g, OR_ESCAPE);
   
@@ -596,7 +622,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
           
           if (m[1] !== undefined){
             // Found a simple bracket, replace with placeholder char
-            var val = BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2) + BRACKET_OUT_ESCAPE
+            var val = BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2).split(',').join(COMMA_IN_SIMPLE_BRACKET_ESCAPE) + BRACKET_OUT_ESCAPE
           } else {
             // Found a bracket containing a top level filter, process this separately
             var bracketExp = m[2].substr(1,m[2].length-2);
@@ -660,9 +686,10 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
   
   // Replace escaped chars with real ones.
 
-  exp = exp.split(BRACKET_IN_ESCAPE).join('(')
-  exp = exp.split(BRACKET_OUT_ESCAPE).join(')')
-  exp = exp.split(OR_ESCAPE).join('||')
+  exp = exp.split(BRACKET_IN_ESCAPE).join('(');
+  exp = exp.split(BRACKET_OUT_ESCAPE).join(')');
+  exp = exp.split(OR_ESCAPE).join('||');
+  exp = exp.split(COMMA_IN_SIMPLE_BRACKET_ESCAPE).join(',');
 
 	var isNot = false;
 	if (exp.length > 0){
@@ -795,13 +822,14 @@ function escapeRegex(str){
 
 module.exports = jnr;
 
-jnr.__express = function(path, options, callback) {
+jnr.__express = function(path, data, callback) {
 
-	fs.readFile(path, 'utf8', function read(err, data) {
+	fs.readFile(path, 'utf8', function read(err, tpl) {
 	  if (err) {
 	      throw err;
 	  }
-	  callback(null, renderTemplate(data, options));
+    
+	  callback(null, jnr.render(tpl, data));
 	});
 		
 }

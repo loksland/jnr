@@ -21,6 +21,120 @@ process.exit(1);
 
 console.log(ttl('To sort')); 
 
+
+
+
+// Custom test
+var title = 'Global string filter';
+var data = {firstName:'Susan'};
+var exp = `Hi {{firstName}}
+Hi {{firstName}}
+Hi {{firstName}}
+`;
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {stringFilter:'uppercase|concat:\'(theend)\''})
+var pass = result.split('\n').join('') == 'HI SUSANHI SUSANHI SUSAN(theend)';
+console.log(exp)
+console.log(result)
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+config.exp+'`');
+}
+
+// Custom test
+var title = 'Global string filter to array';
+var data = {firstName:'Susan'};
+var exp = ['Hi {{firstName}}','Hi {{firstName}}',43]
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {stringFilter:'uppercase|concat:\'(theend)\''})
+var pass = result[0] == 'HI SUSAN(theend)' && result[1] == 'HI SUSAN(theend)' && result[2] === 43
+console.log(exp)
+console.log(result)
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+config.exp+'`');
+}
+
+// Custom test
+jnr.registerFilter('arr', 'joinWithPipes', function(arr){  
+  return arr.join('|');  
+});
+var title = 'Top level filter to array';
+var data = {firstName:'Susan'};
+var exp = ['Hi {{firstName}}','Hi {{firstName}}',43];
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {filter:'joinWithPipes'});
+var pass = result = 'Hi Susan|Hi Susan|43';
+console.log(exp);
+console.log(result);
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+config.exp+'`');
+}
+
+
+// Custom test
+var title = 'Top level and global string filter to array';
+var data = {firstName:'Susan'};
+var exp = ['Hi {{firstName}}','Hi {{firstName}}',43]
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {filter:'joinWithPipes', stringFilter:'uppercase|concat:\'(theend)\''})
+var pass = 'HI SUSAN(theend)|HI SUSAN(theend)|43'
+console.log(exp)
+console.log(result)
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+config.exp+'`');
+}
+
+
+
+
+jnr.registerFilter('int', 'plus', function(){
+  var result = 0;
+  for (var i=0; i < arguments.length; i++) {
+      result += arguments[i];
+  }
+  return result;  
+});
+var data = {name:'Ken'}
+runTest({
+ttl:'Register filter',
+exp: '{{5|plus:95}}',
+data: data,
+eq: '100'
+});
+
+
+runTest({
+ttl:'Ensuring maths function commas aren\'t mistaken for filter argument commas',
+exp: '{{270|plus:Math.atan2(10, 0) * 180 / Math.PI}}',
+data: data,
+eq: '360'
+});
+
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Maths functions',
+exp: '{{Math.atan2(10, 0) * 180 / Math.PI}}',
+data: data,
+eq: '90'
+});
+
+
+
+
+
+var data = {name:'Ken'}
+runTest({
+ttl:'Double filters in an expression',
+exp: '{{(name|uppercase)+(name|lowercase)}}',
+data: data,
+eq: 'KENken'
+});
+
 var data = {price_cents_ex:1848, tax_rate:.1}
 runTest({
 ttl:'Inline bracket calculations and Maths operations',
@@ -196,9 +310,7 @@ women:
 var data = {firstName:'Susan'};
 console.log('\n`'+title+'` test...');
 var result = jnr.render(exp, data, {returnData:true})
-
 console.log(result.data)
-process.exit
 var pass = result.data.myInlineVar.women[1] == 'Susan Williams'
 console.log(data)
 console.log(exp)
@@ -208,7 +320,7 @@ if (!pass){
   throw new Error('Test failed for `'+config.exp+'`');
 }
 
-// Custom test
+
 jnr.registerFilter('arr', 'oxfordComma', function(arr){
   var clone = arr.slice(0);
   if (clone.length > 1){
