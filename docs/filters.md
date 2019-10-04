@@ -192,3 +192,15 @@ jnr.registerFilter('arr', 'oxfordComma', function(arr){
 ``` 
 Fred, Barney, and Wilma
 ```
+
+### Global filters
+
+Apply global render filters using the option properties `filter` and `stringFilter`. 
+
+- `filter` will apply to the top level template only. (This may not be a string)
+- `stringFilter` will be applied to every string value that is rendered.
+
+```node 
+jnr.render(template, data, {filter:'reverse|sentence',stringFilter:'clean|md'})
+```
+
