@@ -131,6 +131,7 @@ Wilma Williams
 ```
 
 **str.stripWhitespace**
+
 Trims white space at beginning and end of each line, collapses consecutive tabs and spaces to a single char.
 ```
 {{filter|stripWhitespace}}

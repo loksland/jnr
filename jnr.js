@@ -129,15 +129,16 @@ function renderTemplate(obj, data, options){
     
   	var str = obj;
     
+    /*
     // Whitespace
     // ----------
     
     // Perform tag whitespace stripping here, only want to perform this once per string.
     
-    if (options.stripWhitespace === 'tags'){
+    if (options.stripWhitespace == 'tags'){
           
-      // 1) Find whole lines with no content other than tags and white space
-      //    OR white space and tags after actual content (leaving line break as is)
+      // 1) Find whole lines with no content other than tags and white space and remove whitespace and trailing line break
+      //    OR find white space and tags after actual content (leaving line break as is)
       var regex = new RegExp('(^(?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+(\\n|$))|((?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+)', 'gim');
       // 2) Strip out inter whitespace and line breaks from these lines.
       var stripRegex = new RegExp('(?:^(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:('+TPL_TAG_CLOSE_REGSAFE+')(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:\\n)', 'gim');
@@ -149,7 +150,7 @@ function renderTemplate(obj, data, options){
           if (m.index === regex.lastIndex) {
               regex.lastIndex++;
           }
-          var val = m[0].replace(stripRegex, '$1'); // Now strip out whitespace between tags (inc line break at end)
+          var val = m[0].replace(stripRegex, '$1'); // Now strip out whitespace between tags (inc line break at end if whole line match)
           str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
           indexOffset += String(val).length - m[0].length;
       }
@@ -159,6 +160,7 @@ function renderTemplate(obj, data, options){
       str = str.replace(endRegex, '$1' )
       
     }
+    */
     
     // Perform render
     // --------------
@@ -169,6 +171,10 @@ function renderTemplate(obj, data, options){
   		str = renderTemplateString(strPreApply, data, options);
   		keepLooping = str != strPreApply;
   	}
+    
+    //if (options.stripWhitespace == 'tags'){      
+    //  str = str.replace(new RegExp(TPL_TAG_OPEN_REGSAFE+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE_REGSAFE, 'gim'), '');
+    //}
     
     if (options.filter.length > 0){
       if (options.filter.charAt(0) != '|'){ // Ensure leading pipe
@@ -198,13 +204,46 @@ var LOGIC_BLOCK_TYPE_LOOP = 'loop';
 var LOGIC_BLOCK_TYPE_CONDITIONAL = 'cond';
 var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 
-//These tags prevent whitespace eating up on subsequent calls
-//var WHITESPACE_TMP_WRAP_IN = '<<WSIN>>';  // Need to be regsafe
-//var WHITESPACE_TMP_WRAP_OUT = '<<WSOUT>>'; 
 
 function renderTemplateString(str, data, options){
 	
 	var preStr = str;
+  
+  
+  /*
+  for (var k =0; k < 12; k++){
+
+    if (options.stripWhitespace == 'tags'){
+      
+      var WHITESPACE_TMP_TAG = TPL_TAG_OPEN+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE
+          
+      // Remove line breaks at end of doc if they are only followed by tags declarations.
+      // str = str.replace(new RegExp('(?:\\n((?:\\s*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'\\s*)+$))', 'i'), '$1')
+      
+      // 1) Find whole lines with no content other than tags and white space
+      var regex = new RegExp('(^)(?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+WHITESPACE_TMP_TAG_EXP+')(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+(\\n|$)', 'gim');
+      
+      var stripRegex = new RegExp('(?:^(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:('+TPL_TAG_CLOSE_REGSAFE+')(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:\\n)', 'gim');
+    
+      var origStr = str;
+      var m;
+      var indexOffset = 0;
+      while ((m = regex.exec(origStr)) !== null) {
+
+          if (m.index === regex.lastIndex) {
+              regex.lastIndex++;
+          }
+          
+          var val = m[0].replace(stripRegex, '$1'+WHITESPACE_TMP_TAG); // Leave a non whitespace tag to prevent whitespace stripping from riding up on subsequent calls.
+          str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+          indexOffset += String(val).length - m[0].length;
+          
+      }
+    }
+    
+  }
+  
+  */
   
 	// Comment blocks
 	// --------------
@@ -256,6 +295,7 @@ function renderTemplateString(str, data, options){
 			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
 			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
 			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+      
 			indexOffset += String(val).length - m[0].length;
 			
 	}
@@ -265,8 +305,7 @@ function renderTemplateString(str, data, options){
 	// Just like a set capture block though is outputted immediately
   var regexStr = TPL_TAG_OPEN_REGSAFE + 'filter(\\|.*?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE
 	var regex = new RegExp(regexStr, 'gim') 
-  // TPL_TAG_OPEN_REGSAFE + 'filter(\\([^'+TPL_TAG_OPEN_REGSAFE+TPL_TAG_CLOSE_REGSAFE+' \\)]*\\))?'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE, 'gim');
-
+  
 	var origStr = str;
 	var m;
 	var indexOffset=0;
@@ -297,7 +336,7 @@ function renderTemplateString(str, data, options){
 	// Set capture block
 	// -----------------
   
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=\\.\\.\\.(\\|.*?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=\\.\\.\\.(\\|.*?)*'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
 	var regex = new RegExp(regexStr, 'gim');
 
 	var origStr = str;
@@ -436,7 +475,6 @@ function renderTemplateString(str, data, options){
 	}
   
 
-
 	// Process simple tags and logic blocks
 	// ------------------------------------
 	
@@ -457,7 +495,8 @@ function renderTemplateString(str, data, options){
 			
 			var exp = m[1];
 			var val = parseTemplateExpression(exp, data);
-			
+			var valLineCanBeRemoved = false;
+      
 			if (exp.length > 14 && exp.substr(0,14) == '_logic_blocks.'){
 
 				var block = val;
@@ -468,8 +507,16 @@ function renderTemplateString(str, data, options){
           if (block.expressionContents !== false){ // One line set call, parse expression to retain data type of results
             
             _val = parseTemplateExpression(block.expressionContents, data);
+            if (options.stripWhitespace == 'tags'){
+              valLineCanBeRemoved = true; // Inline set
+            }
           
           } else if (block.captureContents !== false){ // Capture block, result will always be a string
+            
+            if (options.stripWhitespace == 'tags'){
+                valLineCanBeRemoved = !block.output; // Set capture
+                block.captureContents = stripFirstAndLastLinebreaksIfEmpty(block.captureContents);
+            }  
             
             var _contents = renderTemplateString(block.captureContents, data, options)
             
@@ -489,6 +536,10 @@ function renderTemplateString(str, data, options){
 						data = setObjPathVal(data, block.setVarPath, _val);					
 					}					
 					val = block.output ? _val : '';
+          
+          /*
+          if (options.stripWhitespace == 'tags'){ valLineCanBeRemoved
+          */
 					
 				} else if (block.type == LOGIC_BLOCK_TYPE_CONDITIONAL){
 					
@@ -508,11 +559,25 @@ function renderTemplateString(str, data, options){
 					if (conditionalExp === false) { // No true conditions found
 						conditionalExp = (block.condContentElse == null) ? '' : block.condContentElse
 					}
+          
+          if (options.stripWhitespace == 'tags'){
+              
+              conditionalExp = stripFirstAndLastLinebreaksIfEmpty(conditionalExp);
+          }  
 
 					val = renderTemplateString(conditionalExp, data, options);
 					
 				} else if (block.type == LOGIC_BLOCK_TYPE_LOOP){
 					
+          block.interContent = '';
+          
+          if (options.stripWhitespace == 'tags'){
+              // If leading or traling line break, display one item per line.
+              var loopContentStripped = stripFirstAndLastLinebreaksIfEmpty(block.loopContent);
+              block.interContent = (loopContentStripped.length != block.loopContent.length) ? '\n' : ''
+              block.loopContent = loopContentStripped;
+          }  
+          
 					// Output each block results
 
 					var saveExistingloopPropValAlias;
@@ -549,7 +614,11 @@ function renderTemplateString(str, data, options){
 								data[block.loopPropKeyAlias] = i;
 							}
 							val += renderTemplateString(block.loopContent, data, options);
-
+              
+              if (i < loopSubject.length - 1){
+                val += block.interContent
+              }  
+                
 							delete data[block.loopPropValAlias];
 
 						}
@@ -570,15 +639,18 @@ function renderTemplateString(str, data, options){
 							if (objIndexSet){
 								data[block.loopPropObjIndexAlias] = propIndex;
 							}
-
+                        
 							val += renderTemplateString(block.loopContent, data, options);
-
+              val += block.interContent;
 							delete data[block.loopPropValAlias];
 
 							if (objIndexSet){
 								delete 	data[block.loopPropKeyAlias]
 							}
 						}
+            
+            val = val.substr(0, val.length - block.interContent.length);
+            
 					}
 
 					if (saveExistingloopPropValAlias != undefined){
@@ -599,9 +671,30 @@ function renderTemplateString(str, data, options){
 			}
 			
 			// Due to `set` calls, order is now important. 
-			result = result.substr(0, m.index+indexOffset) + String(val) + result.substr(m.index+indexOffset + m[0].length);
-			indexOffset += String(val).length - m[0].length;
-			//result = result.split(m[0]).join(val);
+      var preceeding = result.substr(0, m.index+indexOffset);
+      var proceeding = result.substr(m.index + indexOffset + m[0].length);
+      
+      if (options.stripWhitespace == 'tags'){
+        
+          valLineCanBeRemoved = valLineCanBeRemoved && REGEX_EMPTY_LAST_LINE.test(preceeding) && REGEX_EMPTY_FIRST_LINE.test(proceeding); // Only remove line if there is nothing else on the line
+          var removePeceedingLinebreak = valLineCanBeRemoved ? REGEX_HAS_LINEBREAK.test(preceeding) && !REGEX_HAS_LINEBREAK.test(proceeding) : false; // Remove preceeding line break if last line
+          
+          // At least strip white space either between the tag and start/end of the line
+          var preceedingStripped = stripEmptyLastLine(preceeding, removePeceedingLinebreak);
+          var proceedingStripped = stripEmptyFirstLine(proceeding, valLineCanBeRemoved);
+          result = preceedingStripped + String(val) + proceedingStripped ;
+          
+          indexOffset += preceedingStripped.length - preceeding.length;
+          indexOffset += proceedingStripped.length - proceeding.length;
+          indexOffset += String(val).length - m[0].length;
+          
+      } else {
+        
+        result = preceeding + String(val) + proceeding;
+        indexOffset += String(val).length - m[0].length;
+        
+      }
+      
 			
 	}
 
@@ -609,13 +702,52 @@ function renderTemplateString(str, data, options){
 
 }
 
+var REGEX_HAS_LINEBREAK = RegExp('\\n','i');
+var REGEX_EMPTY_LAST_LINE = RegExp('(\\n|^)[\\t ]*?$','i');   // NOTE: Considers a single line as the last line
+var REGEX_EMPTY_FIRST_LINE = RegExp('^[\\t ]*?(\\n|$)','i');  // NOTE: Considers a single line as the first line
+
+var REGEX_EMPTY_BEFORE_FIRST_LINEBREAK = RegExp('\\n[\\t ]*?$','i');   // NOTE: Considers a single line as the last line
+var REGEX_EMPTY_AFTER_LAST_LINEBREAK = RegExp('^[\\t ]*?\\n','i');  // NOTE: Considers a single line as the first line
+
+function stripEmptyLastLine(str, removeLastLinebreak){ // 
+  return str.replace(/(?:(\n|^)[\t ]*?$)/gi, removeLastLinebreak ? '' : '$1'); // NOTE: Considers a single line as the last line
+}
+
+function stripEmptyFirstLine(str, removeFirstLineBreak){ // 
+  return str.replace(/(?:^[\t ]*?(\n|$))/gi, removeFirstLineBreak ? '' : '$1'); // NOTE: Considers a single line as the first line
+}
+
+function stripFirstAndLastLinebreaksIfEmpty(str){
+  return str.replace(/(^[\t ]*?\n)|(\n[\t ]*?$)/gi, '');
+}
+
+
+
+
+
+/*
+function stripLastLinebreaksIfEmpty(str){
+  return str.replace(/(\n[\t ]*?$)/gi, '');
+}
+
+function stripFirstLinebreaksIfEmpty(str){
+  return str.replace(/(^[\t ]*?\n)/gi, '');
+}
+*/
+
 //var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
 var BRACKET_IN_ESCAPE = '__brIn'; 
 var BRACKET_OUT_ESCAPE = '__brOut';
 var OR_ESCAPE = '__or'
 var COMMA_IN_SIMPLE_BRACKET_ESCAPE = '__brComma';
-
+// var WHITESPACE_TMP_TAG_EXP = '__whitespace__'
 function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
+  
+  /*
+  if (exp == WHITESPACE_TMP_TAG_EXP) {
+    return  TPL_TAG_OPEN+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE
+  }
+  */
 
   exp = String(exp).trim(); 
 	var origExp = exp;
@@ -781,7 +913,6 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 	// Optional chain
 	props = exp.split('??');
 	
-
 	var result;
 
 	// Search optional props in order
@@ -829,8 +960,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 	} else {
 
 		if (result == undefined){
-      console.log(exp)
-			throw new Error('Couldn\'t resolve template expression `'+origExp+'`');
+			throw new Error('Couldn\'t resolve template expression `'+origExp+'` `'+exp+'`');
 		}
 
 	}

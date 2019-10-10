@@ -22,59 +22,164 @@ console.log(tpl);
 console.log(result);
 process.exit(1);
 
+
+White space tag stripping.
+
+When any of these tags are rendered:
+- `filter`
+- `if`
+- `else`
+- `set`
+- `each`
+- optional?
+Check what else is on the line being written to.
+If just white space then remove line inc. trailing line break.
+If just white space and last line then remove preceeding line break.
+
 */
 
-
 console.log(ttl('To sort')); 
-
-
-// Custom test
-var title = 'Default option';
-var data = {firstName:'Susan'};
-var exp = `Hi {{firstName}}
-Hi {{firstName}}
-Hi {{firstName}}
-`;
-console.log('\n`'+title+'` test...');
-jnr.options = {filter:'uppercase|concat:\'(theend)\''};
-var result = jnr.render(exp, data)
-var pass = result.split('\n').join('') == 'HI SUSANHI SUSANHI SUSAN(theend)';
-console.log(exp)
-console.log(result)
-console.log((pass ? 'OK' : 'FAIL'));
-if (!pass){    
-  throw new Error('Test failed for `'+exp+'`');
-}
-jnr.resetOptions();
-process.exit(1);
 
 
 
 // Custom test
 var title = 'Remove tag whitespace';
-var data = {firstName:'Susan'};
-var exp = `{{set name=firstName + 'S'}}
-LINE 1 (no spacing beyond bracket)    {{set name=firstName + 'S'}}   {{set name=firstName + 'S'}}
-  {{if name=='SusanS'}}     
+var data = {firstName:'Susan',names:['Fred','Barney','Wilma']};
+var exp = `          {{set name = 'test'}} 
+LINE 1
+   {{if true}} 
 LINE 2
-  {{/if}}
+LINE 2.5
+{{/if}}     
 LINE 3
+{{set captureVal=...|lowercase}}
+SET CAPTURE 1
+SET CAPTURE 2
+{{/set}}
+LINE 4
+LINE 5
+{{filter|uppercase}}
+line 6
+{{/filter}}    
+LINE 7  
+{{if firstName=='Susan'}}
+Welcome Ken!
+{{else}}
+You're not Ken!
+{{/if}}     
+SET CAPTURE:
+        {{captureVal}}     
+EACH:
+{{each names as name}}
+{{name}}
+{{/each}}
+EACH INLINE:
+{{each names as name}}{{name}},{{/each}}
+NICKNAME: {{nickName?}}
+LAST LINE
+    {{set name = 'test'}}    
+         {{set name = 'test'}} `
 
-{{set tmp=333+123}}
 
-
-(3 blanks above) LAST LINE.
-  {{set tmp=123+123}}    
-  {{set tmp=123+123}}     `;
 console.log('\n`'+title+'` test...');
 var result = jnr.render(exp, data, {stripWhitespace:'tags'});
-var pass = result == 'LINE 1 (no spacing beyond bracket)\nLINE 2\nLINE 3\n\n\n\n(3 blanks above) LAST LINE.';
+console.log(result.split(' ').join('°').split('\t').join('°'))
+
+var pass = result.split(' ').join('°').split('\t').join('°') == `LINE°1
+LINE°2
+LINE°2.5
+LINE°3
+LINE°4
+LINE°5
+LINE°6
+LINE°7°°
+Welcome°Ken!
+SET°CAPTURE:
+set°capture°1
+set°capture°2
+EACH:
+Fred
+Barney
+Wilma
+EACH°INLINE:
+Fred,Barney,Wilma,
+NICKNAME:°
+LAST°LINE`
 console.log(exp)
 console.log('`' + result + '`')
 console.log((pass ? 'OK' : 'FAIL'));
 if (!pass){    
   throw new Error('Test failed for `'+exp+'`');
 }
+jnr.resetOptions();
+
+
+
+
+
+
+
+
+
+
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+jnr.options = {stripWhitespace:'tags'};
+var data = {firstName:'Susan',num:5, dataStoredExpression:`VVV
+{{set tmp = num}}
+^^^`};
+runTest({
+ttl:'Whitespace with text from data',
+exp: `
+---
+{{dataStoredExpression}}
+---
+`,
+data: data,
+eq: function(result){
+  return result == '\n---\nVVV\n^^^\n---\n'
+}
+});
+jnr.resetOptions();
+
+
+
+jnr.options = {filter:'uppercase'};
+var data = {name:'Ken', dataStoredExpression:`lower case {{name}}`};
+runTest({
+ttl:'Global filter with text from data',
+exp: `{{dataStoredExpression}}`,
+data: data,
+eq: 'LOWER CASE KEN'
+});
+jnr.resetOptions();
+
+
+
+
+
+jnr.options = {filter:'uppercase|concat:\'(theend)\''};
+var data = {firstName:'Susan'};
+runTest({
+ttl:'Default option',
+exp: `Hi {{firstName}}
+Hi {{firstName}}
+Hi {{firstName}}
+`,
+data: data,
+eq: function(result){
+  return result.split('\n').join('') == 'HI SUSANHI SUSANHI SUSAN(theend)';
+}
+});
+jnr.resetOptions();
+
+
+
+
+
+
 
 
 
@@ -146,41 +251,6 @@ console.log((pass ? 'OK' : 'FAIL'));
 if (!pass){    
   throw new Error('Test failed for `'+exp+'`');
 }
-
-// Custom test
-/*
-jnr.registerFilter('arr', 'joinWithPipes', function(arr){  
-  return arr.join('|');  
-});
-var title = 'Top level filter to array';
-var data = {firstName:'Susan'};
-var exp = ['Hi {{firstName}}','Hi {{firstName}}',43];
-console.log('\n`'+title+'` test...');
-var result = jnr.render(exp, data, {filter:'joinWithPipes'});
-var pass = result = 'Hi Susan|Hi Susan|43';
-console.log(exp);
-console.log(result);
-console.log((pass ? 'OK' : 'FAIL'));
-if (!pass){    
-  throw new Error('Test failed for `'+config.exp+'`');
-}
-
-
-// Custom test
-var title = 'Top level and global string filter to array';
-var data = {firstName:'Susan'};
-var exp = ['Hi {{firstName}}','Hi {{firstName}}',43]
-console.log('\n`'+title+'` test...');
-var result = jnr.render(exp, data, {filter:'joinWithPipes', stringFilter:'uppercase|concat:\'(theend)\''})
-var pass = 'HI SUSAN(theend)|HI SUSAN(theend)|43'
-console.log(exp)
-console.log(result)
-console.log((pass ? 'OK' : 'FAIL'));
-if (!pass){    
-  throw new Error('Test failed for `'+config.exp+'`');
-}
-
-*/
 
 
 jnr.registerFilter('int', 'plus', function(){

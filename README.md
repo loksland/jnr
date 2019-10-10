@@ -382,6 +382,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.17 - Strip whitespace for tags improved.
 - v0.1.16 - Whitespace control added, default options, docs updated.
 - v0.1.15 - Global filters and docs update.
 - v0.1.13 - Filter syntax change to pipes, filter arguments enabled, docs updated.
