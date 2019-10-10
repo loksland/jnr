@@ -32,6 +32,7 @@ var md = require('markdown-it')({
   // or '' if the source string is not changed and should be escaped externally.
   // If result starts with <pre... internal wrapper is skipped.
   // highlight: function (/*str, lang*/) { return ''; }
+  
 });
 
 // |dataType| options are 'date','str','float','int'
@@ -98,12 +99,15 @@ filter.applyFilter = function(filterName, args = []){
 		} else {
 			typeKey = 'str'
 		}
+    
 	} else if (typeof obj == 'number'){
+    
 		if (String(obj).split('.').length > 1){
 			typeKey = 'float'
 		} else {
 			typeKey = 'int';
 		}
+    
 	} else if (typeof obj == 'object'){
 		typeKey = 'obj';
 	}
@@ -173,6 +177,18 @@ FILTERS.str.yaml = function(str){
   }
   
   return null;
+  
+}
+
+FILTERS.str.stripWhitespace = function(str){
+  
+  // - Remove any tab indents that remained throughout.
+  // - Remove white space immediately before line break or end of string
+  // - Replace more than 1 tab or space with a single.
+  str = str.replace(/(?:^\s*)|(?:\s*(\n))|(?:\s*$)|(?:([ \t]){2,})/gim, '$1$2');
+  str = str.replace(/(?:\s$)/i, ''); // Remove any whitespace before end of string
+  
+  return str;
   
 }
 

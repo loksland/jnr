@@ -285,17 +285,68 @@ ITEM 3 PRICE IS $5.43
 TOTAL IS $9.08
 ```
 
-### Loading data from template 
 
-Access to variables set in the template can be obtained by using the option property `returnData`. 
+
+### Options 
+
+
+
+Global options can be set for all future renders by overriding the `jnr.options` property.
 
 ```node 
-jnr.render(template, data, {returnData:true})
+jnr.options = {filter:'clean|md', stripWhitespace:true}
 ```
 
-If set to true the function will return an object with 2 properties:
+Calling `jnr.resetOptions()` will revert `jnr.options` back to default settings.
+
+Options can also be custom set for each render by passing in as an argument. 
+These will override the global options.
+
+```node 
+jnr.render(template, data, {filter:'clean|md', stripWhitespace:'tags'})
+```
+
+**options.filter**
+
+Apply global render filter to strings using the option property `filter`. Will be applied to every string that is rendered. 
+
+```node 
+jnr.render(template, data, {filter:'clean|md'})
+```
+
+**options.stripWhitespace**
+
+This option defines how whitespace will be handled by rendering.
+
+- `'all'` or `true` Aggressively remove whitespace from all rendered strings using the option property `stripWhitespace`. This will apply the string filter `stripWhitespace` after rendering and applying any global filters.
+- `'tags'` Remove whitespace created by template tag declarations only.
+- `'none'` or `false` No changes to whitespace will be made.
+  
+```node 
+jnr.render(template, data, {stripWhitespace:true}) // Same as 'all'
+```
+```
+    hello 
+{{if true}}  
+there   !
+
+
+
+{{/if}}
+    
+```
+```
+hello 
+there !
+```
+
+**options.returnData**
+
+If set to `true` the render function will return an object with 2 properties:
 - `render.result` the result of the render
 - `render.data` a copy of the supplied data object including any `set` variables
+
+This will allow access to the result of any `set` declarations that occurred during a render.
 
 ``` 
 {{set inlineMeta=...|yaml}}
@@ -315,6 +366,7 @@ console.log(result.data.inlineMeta.men[1]);
 Bill Jones
 ```
 
+
 ### Custom tags
 
 Custom template tags can be defined using `jnr.setTags(%opening_tag%,%closing_tag%)`  
@@ -330,6 +382,8 @@ Welcome
 ```
 
 ### Release history
+- v0.1.16 - Whitespace control added, default options, docs updated.
+- v0.1.15 - Global filters and docs update.
 - v0.1.13 - Filter syntax change to pipes, filter arguments enabled, docs updated.
 - v0.1.12 - Major update, set, set capture blocks, deep eval, documentation update.
 - v0.1.10 - Switched to async file operations

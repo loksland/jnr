@@ -1,9 +1,4 @@
 
-Remove whitespace
-
-
-
-
 PROMISES, and:
 
 jnr.registerIncDir(path.join(__dirname,'views','includes');
@@ -17,7 +12,6 @@ jnr.registerIncDir(path.join(__dirname,'views','includes');
 ```
 
 write?
-
 
 ### Express compatibility
 

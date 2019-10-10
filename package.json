@@ -1,6 +1,6 @@
 {
   "name": "jnr",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "description": "A simple and powerful templating system supporting conditional logic, optional chaining, nested data sources, non string templates, ternary operators, looping control flow and custom processing functions.",
   "main": "jnr.js",
   "scripts": {

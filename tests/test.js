@@ -8,7 +8,12 @@ var jnr = require('../jnr');
 var data = {name:'Ken',surname:'Jones'};
 var tpl = `
 
-{{name|concat:'-',surname|lowercase}}
+{{filter|uppercase}}
+
+{{name}}
+
+{{/filter}}
+
 
 `
 var result = jnr.render(tpl, data, {returnData:false});
@@ -19,8 +24,95 @@ process.exit(1);
 
 */
 
+
 console.log(ttl('To sort')); 
 
+
+// Custom test
+var title = 'Default option';
+var data = {firstName:'Susan'};
+var exp = `Hi {{firstName}}
+Hi {{firstName}}
+Hi {{firstName}}
+`;
+console.log('\n`'+title+'` test...');
+jnr.options = {filter:'uppercase|concat:\'(theend)\''};
+var result = jnr.render(exp, data)
+var pass = result.split('\n').join('') == 'HI SUSANHI SUSANHI SUSAN(theend)';
+console.log(exp)
+console.log(result)
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+exp+'`');
+}
+jnr.resetOptions();
+process.exit(1);
+
+
+
+// Custom test
+var title = 'Remove tag whitespace';
+var data = {firstName:'Susan'};
+var exp = `{{set name=firstName + 'S'}}
+LINE 1 (no spacing beyond bracket)    {{set name=firstName + 'S'}}   {{set name=firstName + 'S'}}
+  {{if name=='SusanS'}}     
+LINE 2
+  {{/if}}
+LINE 3
+
+{{set tmp=333+123}}
+
+
+(3 blanks above) LAST LINE.
+  {{set tmp=123+123}}    
+  {{set tmp=123+123}}     `;
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {stripWhitespace:'tags'});
+var pass = result == 'LINE 1 (no spacing beyond bracket)\nLINE 2\nLINE 3\n\n\n\n(3 blanks above) LAST LINE.';
+console.log(exp)
+console.log('`' + result + '`')
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+exp+'`');
+}
+
+
+
+// Custom test
+var title = 'Remove all whitespace';
+var data = {firstName:'Susan'};
+var exp = `    {{set name=firstName + 'S'}} {{set name=firstName + 'S'}}
+  {{if name=='SusanS'}}   
+        hello    
+
+
+{{/if}}
+there     
+{{set tmp=123+123}}   
+
+
+
+{{set tmp=123+123}}      `;
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data, {stripWhitespace:true});
+var pass = result == 'hello\nthere';
+console.log(exp)
+console.log('`' + result + '`')
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+exp+'`');
+}
+
+
+
+
+var data = {firstName:'Susan'};
+runTest({
+ttl:'If subject with filter',
+exp: `{{if (firstName|lowercase)=='susan'}}YES{{/if}}`,
+data: data,
+eq: 'YES'
+});
 
 
 
@@ -32,13 +124,13 @@ Hi {{firstName}}
 Hi {{firstName}}
 `;
 console.log('\n`'+title+'` test...');
-var result = jnr.render(exp, data, {stringFilter:'uppercase|concat:\'(theend)\''})
+var result = jnr.render(exp, data, {filter:'uppercase|concat:\'(theend)\''})
 var pass = result.split('\n').join('') == 'HI SUSANHI SUSANHI SUSAN(theend)';
 console.log(exp)
 console.log(result)
 console.log((pass ? 'OK' : 'FAIL'));
 if (!pass){    
-  throw new Error('Test failed for `'+config.exp+'`');
+  throw new Error('Test failed for `'+exp+'`');
 }
 
 // Custom test
@@ -46,16 +138,17 @@ var title = 'Global string filter to array';
 var data = {firstName:'Susan'};
 var exp = ['Hi {{firstName}}','Hi {{firstName}}',43]
 console.log('\n`'+title+'` test...');
-var result = jnr.render(exp, data, {stringFilter:'uppercase|concat:\'(theend)\''})
+var result = jnr.render(exp, data, {filter:'uppercase|concat:\'(theend)\''})
 var pass = result[0] == 'HI SUSAN(theend)' && result[1] == 'HI SUSAN(theend)' && result[2] === 43
 console.log(exp)
 console.log(result)
 console.log((pass ? 'OK' : 'FAIL'));
 if (!pass){    
-  throw new Error('Test failed for `'+config.exp+'`');
+  throw new Error('Test failed for `'+exp+'`');
 }
 
 // Custom test
+/*
 jnr.registerFilter('arr', 'joinWithPipes', function(arr){  
   return arr.join('|');  
 });
@@ -87,7 +180,7 @@ if (!pass){
   throw new Error('Test failed for `'+config.exp+'`');
 }
 
-
+*/
 
 
 jnr.registerFilter('int', 'plus', function(){
@@ -317,7 +410,7 @@ console.log(exp)
 console.log(result.rendered)
 console.log((pass ? 'OK' : 'FAIL'));
 if (!pass){    
-  throw new Error('Test failed for `'+config.exp+'`');
+  throw new Error('Test failed for `'+exp+'`');
 }
 
 

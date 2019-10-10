@@ -44,8 +44,6 @@ Eg:
 ken-jones
 ```
 
-
-
 ### Included filters 
 
 
@@ -132,6 +130,22 @@ women:
 Wilma Williams
 ```
 
+**str.stripWhitespace**
+Trims white space at beginning and end of each line, collapses consecutive tabs and spaces to a single char.
+```
+{{filter|stripWhitespace}}
+      hello 
+    {{if true}}
+there   !
+    {{/if}}
+    
+{{/filter}}
+```
+```
+hello 
+there !
+```
+
 **str.md**   
 
 Converts supplied markdown string to HTML string, using the [markdown-it](https://www.npmjs.com/package/markdown-it) library. If the supplied string has line breaks, the result will be wrapped in a p tag.
@@ -193,14 +207,5 @@ jnr.registerFilter('arr', 'oxfordComma', function(arr){
 Fred, Barney, and Wilma
 ```
 
-### Global filters
 
-Apply global render filters using the option properties `filter` and `stringFilter`. 
-
-- `filter` will apply to the top level template only. (This may not be a string)
-- `stringFilter` will be applied to every string value that is rendered.
-
-```node 
-jnr.render(template, data, {filter:'reverse|sentence',stringFilter:'clean|md'})
-```
 

@@ -25,14 +25,43 @@ jnr.registerFilter = filter.registerFilter;
 // |options| (optional object)
 // - `returnData` if set to true, instead of returning rendered object will return obj and the data
 //   {rendered:obj, data:obj}
-// - `filter` Top level filter will be applied to the top level template.
-// - `stringFilter` Global string filter string sequence will be applied to every string that is rendered.
+// - `filter` Global filter (string only) string sequence will be applied to every string that is rendered.
+// - `stripWhitespace` Remove white space taken up by tag delcarations.
 
-jnr.render = function(obj, data, options = {}){
+jnr.options; // Can set this and will be used as default.
+
+jnr.resetOptions = function(){
+  
+  jnr.options = {};
+  jnr.options.returnData = false;
+  jnr.options.filter = '';
+  jnr.options.stripWhitespace = false;
+  
+}
+jnr.resetOptions();
+
+jnr.render = function(obj, data, options = null){
   
   var _data = dupe(data); // Create a duplicate data to work with
   
-  var rendered = renderTemplate(obj, _data, options.filter, options.stringFilter);
+  var _options = options;
+  options = dupe(jnr.options);
+  if (_options){
+    // Overwrite default options with custom options
+    options = Object.assign(options, _options); 
+  } 
+  
+  // Clean up options
+  
+  options.filter = (options.filter && typeof options.filter === 'string') ? options.filter.trim() : '';
+  
+  options.stripWhitespace = options.stripWhitespace === true ? 'all' : options.stripWhitespace;   // true means 'all'
+  options.stripWhitespace = typeof options.stripWhitespace !== 'string' ? 'none' : options.stripWhitespace.toLowerCase();
+  if (options.stripWhitespace !== 'all' && options.stripWhitespace !== 'tags' && options.stripWhitespace !== 'none'){
+    throw new Error('Invalid whitespace mode `'+options.stripWhitespace+'`')
+  }
+  
+  var rendered = renderTemplate(obj, _data, options);
   
   if (options.returnData){ // This can be used to access the result of `set` calls.
     return {rendered:rendered, data:_data};
@@ -56,10 +85,9 @@ jnr.setTags = function(tagOpen, tagClose){
 
 // Template
 // --------
-function renderTemplate(obj, data, topLevelFilter = null, globalStringFilter = null){
+function renderTemplate(obj, data, options){
 
 	// Apply recursively looking for string data
-  
   
   if (data._logic_blocks == undefined){
 		data._logic_blocks = [];
@@ -69,22 +97,27 @@ function renderTemplate(obj, data, topLevelFilter = null, globalStringFilter = n
 		data._tmp_vars = [];
 	}
   
+  //if (data._render_state == undefined){
+	//	data._render_state = {};
+  //  data._render_state.renderIndex = -1;
+	//}
+  
 	if (isNonArrObj(obj)){
 
 		obj = dupe(obj); // Duplicate the template to keep original
 		for (var p in obj){
-			obj[p] = renderTemplate(obj[p], data, null, globalStringFilter);
+			obj[p] = renderTemplate(obj[p], data, options);
 		}
 
 	} else if (Array.isArray(obj)){
 
 		obj = dupe(obj); // Duplicate the template to keep original
 		for (var i = 0 ; i < obj.length; i++){
-			obj[i] = renderTemplate(obj[i], data, null, globalStringFilter);
+			obj[i] = renderTemplate(obj[i], data, options);
 		}
 
 	} else if (typeof obj !== 'string'){
-
+    
     // Probably a primitive data type, leave alone
 		return obj; 
     
@@ -94,37 +127,68 @@ function renderTemplate(obj, data, topLevelFilter = null, globalStringFilter = n
   
   if (typeof obj == 'string') {
     
-  	var keepLooping = true;
   	var str = obj;
-  	
+    
+    // Whitespace
+    // ----------
+    
+    // Perform tag whitespace stripping here, only want to perform this once per string.
+    
+    if (options.stripWhitespace === 'tags'){
+          
+      // 1) Find whole lines with no content other than tags and white space
+      //    OR white space and tags after actual content (leaving line break as is)
+      var regex = new RegExp('(^(?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+(\\n|$))|((?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+)', 'gim');
+      // 2) Strip out inter whitespace and line breaks from these lines.
+      var stripRegex = new RegExp('(?:^(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:('+TPL_TAG_CLOSE_REGSAFE+')(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:\\n)', 'gim');
+      
+      var origStr = str;
+      var m;
+      var indexOffset = 0;
+      while ((m = regex.exec(origStr)) !== null) {
+          if (m.index === regex.lastIndex) {
+              regex.lastIndex++;
+          }
+          var val = m[0].replace(stripRegex, '$1'); // Now strip out whitespace between tags (inc line break at end)
+          str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+          indexOffset += String(val).length - m[0].length;
+      }
+      
+      // Remove line breaks at end of doc if they are only followed by tags declarations.
+      var endRegex = new RegExp('(?:\\n((?:\\s*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'\\s*)+$))', 'i');
+      str = str.replace(endRegex, '$1' )
+      
+    }
+    
+    // Perform render
+    // --------------
+    
+    var keepLooping = true;
   	while (keepLooping){ // Keep looping until no change in string
   		var strPreApply = str;
-  		str = renderTemplateString(strPreApply, data);
+  		str = renderTemplateString(strPreApply, data, options);
   		keepLooping = str != strPreApply;
   	}
     
-    if (globalStringFilter && typeof globalStringFilter == 'string'){
-      if (globalStringFilter.charAt(0) != '|'){ // Ensure leading pipe
-        globalStringFilter = '|' + globalStringFilter;
+    if (options.filter.length > 0){
+      if (options.filter.charAt(0) != '|'){ // Ensure leading pipe
+        options.filter = '|' + options.filter;
       }
       data._tmp_vars.push(str);
-      str = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ globalStringFilter, data)
+      str = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ options.filter, data)
+    }
+    
+    if (options.stripWhitespace === 'all'){
+      str = filter.applyFilter('stripWhitespace', [str]) // Apply agressive whitespace removal
     }
     
     obj = str;
     
   }
   
-  if (topLevelFilter && typeof topLevelFilter == 'string'){
-    if (topLevelFilter.charAt(0) != '|'){ // Ensure leading pipe
-      topLevelFilter = '|' + topLevelFilter;
-    }
-    data._tmp_vars.push(obj);
-    obj = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ topLevelFilter, data)
-  }
-  
   delete data._logic_blocks;
 	delete data._tmp_vars;
+  //delete data._render_state;
   
 	return obj;
 
@@ -134,10 +198,14 @@ var LOGIC_BLOCK_TYPE_LOOP = 'loop';
 var LOGIC_BLOCK_TYPE_CONDITIONAL = 'cond';
 var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 
-function renderTemplateString(str, data){
+//These tags prevent whitespace eating up on subsequent calls
+//var WHITESPACE_TMP_WRAP_IN = '<<WSIN>>';  // Need to be regsafe
+//var WHITESPACE_TMP_WRAP_OUT = '<<WSOUT>>'; 
+
+function renderTemplateString(str, data, options){
 	
 	var preStr = str;
-	
+  
 	// Comment blocks
 	// --------------
 	
@@ -253,7 +321,6 @@ function renderTemplateString(str, data){
 			block.index = data._logic_blocks.length;
 			data._logic_blocks.push(block);
 
-
 			// str = str.split(m[0]).join(TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE)
 			var val = TPL_TAG_OPEN + '_logic_blocks.'+ String(block.index)+TPL_TAG_CLOSE;
 			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
@@ -365,8 +432,10 @@ function renderTemplateString(str, data){
 	
 	// Keep processing until all logic blocks are resolved
 	if (str != preStr){
-		return renderTemplateString(str, data);
+		return renderTemplateString(str, data, options);
 	}
+  
+
 
 	// Process simple tags and logic blocks
 	// ------------------------------------
@@ -402,7 +471,7 @@ function renderTemplateString(str, data){
           
           } else if (block.captureContents !== false){ // Capture block, result will always be a string
             
-            var _contents = renderTemplateString(block.captureContents, data)
+            var _contents = renderTemplateString(block.captureContents, data, options)
             
             if (block.captureFilterListStr !== false){
               // Hand off to `parseTemplateExpression` to handle filter processing
@@ -440,7 +509,7 @@ function renderTemplateString(str, data){
 						conditionalExp = (block.condContentElse == null) ? '' : block.condContentElse
 					}
 
-					val = renderTemplateString(conditionalExp, data);
+					val = renderTemplateString(conditionalExp, data, options);
 					
 				} else if (block.type == LOGIC_BLOCK_TYPE_LOOP){
 					
@@ -479,7 +548,7 @@ function renderTemplateString(str, data){
 							if (keyAliasSet){
 								data[block.loopPropKeyAlias] = i;
 							}
-							val += renderTemplateString(block.loopContent, data);
+							val += renderTemplateString(block.loopContent, data, options);
 
 							delete data[block.loopPropValAlias];
 
@@ -502,7 +571,7 @@ function renderTemplateString(str, data){
 								data[block.loopPropObjIndexAlias] = propIndex;
 							}
 
-							val += renderTemplateString(block.loopContent, data);
+							val += renderTemplateString(block.loopContent, data, options);
 
 							delete data[block.loopPropValAlias];
 
