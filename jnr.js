@@ -129,39 +129,6 @@ function renderTemplate(obj, data, options){
     
   	var str = obj;
     
-    /*
-    // Whitespace
-    // ----------
-    
-    // Perform tag whitespace stripping here, only want to perform this once per string.
-    
-    if (options.stripWhitespace == 'tags'){
-          
-      // 1) Find whole lines with no content other than tags and white space and remove whitespace and trailing line break
-      //    OR find white space and tags after actual content (leaving line break as is)
-      var regex = new RegExp('(^(?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+(\\n|$))|((?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+)', 'gim');
-      // 2) Strip out inter whitespace and line breaks from these lines.
-      var stripRegex = new RegExp('(?:^(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:('+TPL_TAG_CLOSE_REGSAFE+')(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:\\n)', 'gim');
-      
-      var origStr = str;
-      var m;
-      var indexOffset = 0;
-      while ((m = regex.exec(origStr)) !== null) {
-          if (m.index === regex.lastIndex) {
-              regex.lastIndex++;
-          }
-          var val = m[0].replace(stripRegex, '$1'); // Now strip out whitespace between tags (inc line break at end if whole line match)
-          str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
-          indexOffset += String(val).length - m[0].length;
-      }
-      
-      // Remove line breaks at end of doc if they are only followed by tags declarations.
-      var endRegex = new RegExp('(?:\\n((?:\\s*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'\\s*)+$))', 'i');
-      str = str.replace(endRegex, '$1' )
-      
-    }
-    */
-    
     // Perform render
     // --------------
     
@@ -208,42 +175,6 @@ var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 function renderTemplateString(str, data, options){
 	
 	var preStr = str;
-  
-  
-  /*
-  for (var k =0; k < 12; k++){
-
-    if (options.stripWhitespace == 'tags'){
-      
-      var WHITESPACE_TMP_TAG = TPL_TAG_OPEN+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE
-          
-      // Remove line breaks at end of doc if they are only followed by tags declarations.
-      // str = str.replace(new RegExp('(?:\\n((?:\\s*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'\\s*)+$))', 'i'), '$1')
-      
-      // 1) Find whole lines with no content other than tags and white space
-      var regex = new RegExp('(^)(?:[\\t ]*'+TPL_TAG_OPEN_REGSAFE+'(?:(?!'+WHITESPACE_TMP_TAG_EXP+')(?!'+TPL_TAG_CLOSE_REGSAFE+').)*'+TPL_TAG_CLOSE_REGSAFE+'[\\t ]*?)+(\\n|$)', 'gim');
-      
-      var stripRegex = new RegExp('(?:^(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:('+TPL_TAG_CLOSE_REGSAFE+')(?:(?:(?!'+TPL_TAG_OPEN_REGSAFE+')\\s)*))|(?:\\n)', 'gim');
-    
-      var origStr = str;
-      var m;
-      var indexOffset = 0;
-      while ((m = regex.exec(origStr)) !== null) {
-
-          if (m.index === regex.lastIndex) {
-              regex.lastIndex++;
-          }
-          
-          var val = m[0].replace(stripRegex, '$1'+WHITESPACE_TMP_TAG); // Leave a non whitespace tag to prevent whitespace stripping from riding up on subsequent calls.
-          str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
-          indexOffset += String(val).length - m[0].length;
-          
-      }
-    }
-    
-  }
-  
-  */
   
 	// Comment blocks
 	// --------------
@@ -720,20 +651,6 @@ function stripEmptyFirstLine(str, removeFirstLineBreak){ //
 function stripFirstAndLastLinebreaksIfEmpty(str){
   return str.replace(/(^[\t ]*?\n)|(\n[\t ]*?$)/gi, '');
 }
-
-
-
-
-
-/*
-function stripLastLinebreaksIfEmpty(str){
-  return str.replace(/(\n[\t ]*?$)/gi, '');
-}
-
-function stripFirstLinebreaksIfEmpty(str){
-  return str.replace(/(^[\t ]*?\n)/gi, '');
-}
-*/
 
 //var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
 var BRACKET_IN_ESCAPE = '__brIn'; 
