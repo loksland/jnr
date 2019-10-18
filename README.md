@@ -2,6 +2,7 @@
 
 A simple and powerful templating engine that supports:
  - optional chaining
+ - includes (partials)
  - conditional logic
  - nested data sources
  - non-string templates
@@ -10,6 +11,7 @@ A simple and powerful templating engine that supports:
  - [custom processing filters](docs/filters.md)
  - expression evaluation
  - block capture
+ - support for express 
 
 ### Installation
 
@@ -209,9 +211,6 @@ Eg:
 ken-jones
 ```
 
-
-
-
 ### Filtering output 
 
 Output blocks can have a filter applied using the `filter|%filter_name%` tag.
@@ -285,11 +284,41 @@ ITEM 3 PRICE IS $5.43
 TOTAL IS $9.08
 ```
 
+### Includes (partials)
 
+Template data can be loaded from other files efficiently using the syntax `{{>filename.ext}}`.
+
+First register any directories that contain the content to include:
+```node
+jnr.registerIncludePath(path.join(__dirname,'inc'));
+jnr.registerIncludePath(path.join(__dirname,'partials'));
+
+```
+
+Then call in the include:
+```
+{{>footer.md}}
+```
+
+If no extension is used, the default extension `.jnr` will be assumed.
+
+Sub-directories in the include path are supported.
+```
+{{>path/to/footer.md}}
+```
+
+Filters can be applied to the result.
+```
+{{>footer.md|filter1|filter2}}
+```
+
+To perform the file operations using async operations, use the `renderPromise` method. 
+
+```node 
+jnr.renderPromise(tpl, data, options).then(console.log, console.error);
+```
 
 ### Options 
-
-
 
 Global options can be set for all future renders by overriding the `jnr.options` property.
 
@@ -382,6 +411,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.18 - Includes, pre sweep, resolving nested expressions. Updated docs and tests.
 - v0.1.17 - Strip whitespace for tags improved.
 - v0.1.16 - Whitespace control added, default options, docs updated.
 - v0.1.15 - Global filters and docs update.

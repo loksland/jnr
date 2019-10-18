@@ -1,44 +1,43 @@
 #! /usr/bin/env node
 
 var jnr = require('../jnr');
+var path = require('path');
+jnr.registerIncludePath(path.join(__dirname,'inc'));
+jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
-/*
-
-var data = {name:'Ken',surname:'Jones'};
-var tpl = `
-
-{{filter|uppercase}}
-
-{{name}}
-
-{{/filter}}
 
 
-`
-var result = jnr.render(tpl, data, {returnData:false});
-console.log('+ + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +')
-console.log(tpl);
-console.log(result);
-process.exit(1);
+var data = {foo:'{{>foo|uppercase}}', bar:'{{>bar}}'};
+runTest({
+ttl:'Sync include with filters',
+exp: `{{>foo.jnr}}{{foo}}{{>bar|lowercase}}{{bar}}`,
+data: data,
+eq: '(I Am Foo)(I AM FOO)(i am bar)(I Am Bar)'
+});
 
 
-White space tag stripping.
 
-When any of these tags are rendered:
-- `filter`
-- `if`
-- `else`
-- `set`
-- `each`
-- optional?
-Check what else is on the line being written to.
-If just white space then remove line inc. trailing line break.
-If just white space and last line then remove preceeding line break.
+var data = {name:'Keith {{name2}}', name2:'{{name3}}',name3:'Brian'};
+runTest({
+ttl:'Ensuring conditionals can resolve nested expressions before being evaluated',
+exp: `{{if (name|uppercase)=='KEITH BRIAN'}}correct{{/if}}`,
+data: data,
+eq: 'correct'
+});
 
-*/
 
-console.log(ttl('To sort')); 
+
+
+var data = {name:'Keith {{name2}}', name2:'{{name3}}',name3:'Brian'};
+runTest({
+ttl:'Ensuring nested expression names are not filtered',
+exp: `{{name|uppercase}}`,
+data: data,
+eq: 'KEITH BRIAN'
+});
+
+
 
 
 
@@ -112,13 +111,6 @@ if (!pass){
   throw new Error('Test failed for `'+exp+'`');
 }
 jnr.resetOptions();
-
-
-
-
-
-
-
 
 
 
@@ -564,7 +556,7 @@ eq: 'THIS SHOULD BE UPPER CASE. OK'
 var data = {num:1};
 runTest({
 ttl:'Comment blocks',
-exp: 'Pre comment,{{/* {{if num==1}} Number is one {{/if}} */}} post comment{{/* num is {{num}} {{/if}} */}}.',
+exp: 'Pre comment,{{/'+'* {{if num==1}} Number is one {{/if}} *'+'/}} post comment{{/'+'* num is {{num}} {{/if}} *'+'/}}.',
 data: data,
 eq: 'Pre comment, post comment.'
 })
@@ -1028,18 +1020,6 @@ data: data,
 eq: 'Might be a bird'
 })
 
-/*
-Ternarys do not accept spacing in literals
-var data = {isTrue:true};
-runTest({
-ttl:'Ternary literal with space',
-exp: '{{isTrue?\'Y A Y\':\'NAY\'}}',
-data: data,
-eq: 'Y A Y'
-})
-*/
-
-
 console.log(ttl('Filters'));
 
 
@@ -1162,9 +1142,30 @@ exp: 'My name is {{name}}',
 data: data,
 eq: 'My name is Laurence'
 })
+
+
+var title = 'Async includes with filters';
+var data = {foo:'{{>foo|uppercase}}', bar:'{{>bar}}'};
+var exp = ` {{>foo.jnr}}{{foo}}{{>bar|lowercase}}{{bar}}`;
+console.log('\n`'+title+'` test...');
+var result = jnr.renderPromise(exp, data).then(function (render){
+  var pass = render = '(I Am Foo)(I AM FOO)(i am bar)(I Am Bar)';
+  console.log((pass ? 'OK' : 'FAIL'));
+  return pass;
+}, function(error){
+  throw new Error('Test failed for `'+exp+'`');
+}).then(function(pass){
+  
+  if (pass){    
+    console.log('\nALL PASS\n');
+  }
+  
+})
+
+
+
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 
-console.log('\nALL PASS\n')
 
 function ttl(msg){
 
@@ -1191,3 +1192,5 @@ function runTest(config){
   }
 
 }
+
+

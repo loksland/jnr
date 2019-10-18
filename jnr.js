@@ -10,12 +10,27 @@ var path = require('path');
 var filter = require('./filter');
 var utils = require('./utils');
 var safeEval = require('safe-eval');
+var Promise = require('bluebird');
+var readFilePromise = Promise.promisify(fs.readFile); // readFile('myfile.js', 'utf8').then(function(contents) {
+var fileExistsPromise = function(path) {
+  return new Promise(function(resolve, reject){
+      fs.access(path, fs.F_OK, function(err){
+        if (err) {
+          return reject(err);
+        }
+        resolve(path);
+      }
+    )
+  })
+}
 
 var TPL_TAG_OPEN = TPL_TAG_OPEN_DEFAULT = '{{'; // Can be the same char
 var TPL_TAG_CLOSE = TPL_TAG_CLOSE_DEFAULT = '}}'; // Can be the same char
 
 var TPL_TAG_OPEN_REGSAFE = escapeRegex(TPL_TAG_OPEN);
 var TPL_TAG_CLOSE_REGSAFE = escapeRegex(TPL_TAG_CLOSE);
+
+var DEFAULT_INC_EXT = '.jnr';
 
 function jnr(){
 }
@@ -40,9 +55,36 @@ jnr.resetOptions = function(){
 }
 jnr.resetOptions();
 
-jnr.render = function(obj, data, options = null){
+
+var includePaths = [];
+jnr.registerIncludePath = function(dirPath){     
+  if (!isPathValid(dirPath)) { // Check Poison Null bytes
+      throw new Error('Invalid dir path')
+  } 
+  includePaths.push(dirPath);  
+}
+
+// Returns a promise. This is only useful for including files async.
+jnr.renderPromise = function(obj, data, options = {}){
+    
+    options.async = true;
+    return jnr.render(obj, data, options);
+    
+}
+
+jnr.render = function(obj, data = {}, options = null){
   
   var _data = dupe(data); // Create a duplicate data to work with
+  var _obj = dupe(obj); // Duplicate the template to keep original
+  
+  if (_data._logic_blocks == undefined){
+		_data._logic_blocks = [];
+	}
+  
+  if (_data._tmp_vars == undefined){
+		_data._tmp_vars = [];
+	}
+  
   
   var _options = options;
   options = dupe(jnr.options);
@@ -58,15 +100,196 @@ jnr.render = function(obj, data, options = null){
   options.stripWhitespace = options.stripWhitespace === true ? 'all' : options.stripWhitespace;   // true means 'all'
   options.stripWhitespace = typeof options.stripWhitespace !== 'string' ? 'none' : options.stripWhitespace.toLowerCase();
   if (options.stripWhitespace !== 'all' && options.stripWhitespace !== 'tags' && options.stripWhitespace !== 'none'){
-    throw new Error('Invalid whitespace mode `'+options.stripWhitespace+'`')
+    var err = new Error('Invalid whitespace mode `'+options.stripWhitespace+'`')
+    if (options.async){
+      return Promise.throw(err);
+    } 
+    throw err;
   }
   
-  var rendered = renderTemplate(obj, _data, options);
+  // Handle includes
+  // ---------------
+  
+  // Traverse both _obj and _data, finding any include declarations and resolving before 
+  // performing render (sync). Also strips comments.
+
+  var sweepData = {}
+  _obj = preSweep(_obj, sweepData, options);
+  _data = preSweep(_data, sweepData, options);
+  
+  if (options.async && sweepData._incFilePaths){
+    
+    // Resolve these paths before continuing
+    
+    var incPromises = [];
+    var incPaths = [];
+    
+    for (var incFilePath in sweepData._incFilePaths){
+      incPaths.push(incFilePath);
+      incPromises.push(resolveIncludePath(incFilePath))
+    }
+    
+    return Promise.all(incPromises).then(function(arr){
+      
+      for (var i = 0; i < arr.length; i++){
+        sweepData._incFilePaths[incPaths[i]] = arr[i];
+      }
+      
+      _obj = preSweep(_obj, sweepData, options); // Will insert values back now
+      _data = preSweep(_data, sweepData, options); // Will insert values back now
+      
+      return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options))      
+      
+    });
+    
+  }
+
+  if (options.async){
+    return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options));
+  } else {
+    return postRender(renderTemplate(_obj, _data, options), _data, options);
+  }
+
+}
+
+function postRender(rendered, data, options){
   
   if (options.returnData){ // This can be used to access the result of `set` calls.
-    return {rendered:rendered, data:_data};
+  
+    delete data._logic_blocks;
+	  delete data._tmp_vars;
+    
+    return {rendered:rendered, data:data};
+    
   }
 	return rendered;
+  
+}
+
+function preSweep(obj, data, options){
+  
+  if (isNonArrObj(obj)){
+
+		//obj = dupe(obj); // Duplicate the template to keep original
+    
+		for (var p in obj){
+			obj[p] = preSweep(obj[p], data, options);
+		}
+    
+    return obj;
+
+	} else if (Array.isArray(obj)){
+
+		//obj = dupe(obj); // Duplicate the template to keep original
+		for (var i = 0 ; i < obj.length; i++){
+			obj[i] = preSweep(obj[i], data, options);
+		}
+    
+    return obj;
+
+	} else if (typeof obj !== 'string'){
+    
+    // Probably a primitive data type, leave alone
+		return obj; 
+    
+	}
+  
+  var str = obj;
+  
+  // Comment blocks
+  // --------------
+  // These need to process first as may contain tags that should be ignored
+  var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '\/\\*' + '(.|\s|\r|\n)*?' + '\\*\/' + TPL_TAG_CLOSE_REGSAFE, 'gim');
+  
+  var origStr = str;
+  var m;
+  var indexOffset = 0;
+  while ((m = regex.exec(origStr)) !== null) {
+
+      if (m.index === regex.lastIndex) {
+          regex.lastIndex++;
+      }
+
+      var val = '';
+      str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+      indexOffset += String(val).length - m[0].length;
+      
+  }
+  
+  if (includePaths.length > 0){
+    
+    // Includes 
+    // --------
+
+    var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '>(.*?)(\\|.*?)?' + TPL_TAG_CLOSE_REGSAFE, 'gim');
+
+    var origStr = str;
+    var m;
+    var indexOffset = 0;
+    var incPromises = [];  
+    while ((m = regex.exec(origStr)) !== null) {
+        
+        if (m.index === regex.lastIndex) {
+            regex.lastIndex++;
+        }
+      
+        var incFilePath = String(m[1]).trim();      
+        var incFilters = m[2];
+
+        if (!isPathValid(incFilePath)) { 
+            throw new Error('Invalid path `'+incFilePath+'`')
+        }
+        
+        if (path.extname(incFilePath) == ''){
+          incFilePath += DEFAULT_INC_EXT;
+        }
+        
+        var val;
+        
+        if (options.async){
+          
+          if (data._incFilePaths && typeof data._incFilePaths[incFilePath] === 'string'){ // 2nd sweep
+            
+            val = data._incFilePaths[incFilePath]; // Set data
+            
+          } else { // First sweep: Queue list of paths to load
+          
+            val = '';
+            if (incFilters){
+              val += TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE;
+            } 
+            val += TPL_TAG_OPEN + '>' + incFilePath + TPL_TAG_CLOSE; // Will be replaced with content next sweep
+            if (incFilters){
+              val += TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+            } 
+            
+            if (!data._incFilePaths){
+              data._incFilePaths = {};
+            }
+            data._incFilePaths[incFilePath] = true;
+            
+          }
+            
+        } else {     
+          
+          var incContents = resolveIncludePathSync(incFilePath);
+             
+          if (incFilters){
+            val = TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE + incContents + TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+          } else {        
+            val = incContents;   
+          } 
+          
+        }
+        
+        str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+        indexOffset += String(val).length - m[0].length;
+        
+    }
+    
+  }
+    
+  return str;
   
 }
 
@@ -87,31 +310,17 @@ jnr.setTags = function(tagOpen, tagClose){
 // --------
 function renderTemplate(obj, data, options){
 
-	// Apply recursively looking for string data
-  
-  if (data._logic_blocks == undefined){
-		data._logic_blocks = [];
-	}
-  
-  if (data._tmp_vars == undefined){
-		data._tmp_vars = [];
-	}
-  
-  //if (data._render_state == undefined){
-	//	data._render_state = {};
-  //  data._render_state.renderIndex = -1;
-	//}
-  
 	if (isNonArrObj(obj)){
 
-		obj = dupe(obj); // Duplicate the template to keep original
+		//obj = dupe(obj); // Duplicate the template to keep original
+    
 		for (var p in obj){
 			obj[p] = renderTemplate(obj[p], data, options);
 		}
 
 	} else if (Array.isArray(obj)){
 
-		obj = dupe(obj); // Duplicate the template to keep original
+		//obj = dupe(obj); // Duplicate the template to keep original
 		for (var i = 0 ; i < obj.length; i++){
 			obj[i] = renderTemplate(obj[i], data, options);
 		}
@@ -132,12 +341,7 @@ function renderTemplate(obj, data, options){
     // Perform render
     // --------------
     
-    var keepLooping = true;
-  	while (keepLooping){ // Keep looping until no change in string
-  		var strPreApply = str;
-  		str = renderTemplateString(strPreApply, data, options);
-  		keepLooping = str != strPreApply;
-  	}
+    str = renderString(str, data, options);
     
     //if (options.stripWhitespace == 'tags'){      
     //  str = str.replace(new RegExp(TPL_TAG_OPEN_REGSAFE+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE_REGSAFE, 'gim'), '');
@@ -148,7 +352,7 @@ function renderTemplate(obj, data, options){
         options.filter = '|' + options.filter;
       }
       data._tmp_vars.push(str);
-      str = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ options.filter, data)
+      str = renderExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ options.filter, data, options)
     }
     
     if (options.stripWhitespace === 'all'){
@@ -159,10 +363,6 @@ function renderTemplate(obj, data, options){
     
   }
   
-  delete data._logic_blocks;
-	delete data._tmp_vars;
-  //delete data._render_state;
-  
 	return obj;
 
 }
@@ -172,30 +372,10 @@ var LOGIC_BLOCK_TYPE_CONDITIONAL = 'cond';
 var LOGIC_BLOCK_TYPE_SET_CAPTURE = 'set';
 
 
-function renderTemplateString(str, data, options){
+function renderString(str, data, options){
 	
 	var preStr = str;
   
-	// Comment blocks
-	// --------------
-	
-	var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '\/\\*' + '(.|\s|\r|\n)*?' + '\\*\/' + TPL_TAG_CLOSE_REGSAFE, 'gim');
-	
-	var origStr = str;
-	var m;
-	var indexOffset = 0;
-	while ((m = regex.exec(origStr)) !== null) {
-
-			if (m.index === regex.lastIndex) {
-					regex.lastIndex++;
-			}
-
-			var val = '';
-			str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
-			indexOffset += String(val).length - m[0].length;
-			
-	}
-	
 	// Simple set 
 	// ----------
 	
@@ -402,10 +582,9 @@ function renderTemplateString(str, data, options){
 	
 	// Keep processing until all logic blocks are resolved
 	if (str != preStr){
-		return renderTemplateString(str, data, options);
+		return renderString(str, data, options);
 	}
   
-
 	// Process simple tags and logic blocks
 	// ------------------------------------
 	
@@ -425,7 +604,7 @@ function renderTemplateString(str, data, options){
 			}
 			
 			var exp = m[1];
-			var val = parseTemplateExpression(exp, data);
+			var val = renderExpression(exp, data, options);
 			var valLineCanBeRemoved = false;
       
 			if (exp.length > 14 && exp.substr(0,14) == '_logic_blocks.'){
@@ -437,7 +616,7 @@ function renderTemplateString(str, data, options){
           var _val;
           if (block.expressionContents !== false){ // One line set call, parse expression to retain data type of results
             
-            _val = parseTemplateExpression(block.expressionContents, data);
+            _val = renderExpression(block.expressionContents, data, options);
             if (options.stripWhitespace == 'tags'){
               valLineCanBeRemoved = true; // Inline set
             }
@@ -449,12 +628,12 @@ function renderTemplateString(str, data, options){
                 block.captureContents = stripFirstAndLastLinebreaksIfEmpty(block.captureContents);
             }  
             
-            var _contents = renderTemplateString(block.captureContents, data, options)
+            var _contents = renderString(block.captureContents, data, options)
             
             if (block.captureFilterListStr !== false){
-              // Hand off to `parseTemplateExpression` to handle filter processing
+              // Hand off to `renderExpression` to handle filter processing
               data._tmp_vars.push(_contents);
-              _val = parseTemplateExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ block.captureFilterListStr, data)
+              _val = renderExpression('_tmp_vars[' + String(data._tmp_vars.length-1) + ']'+ block.captureFilterListStr, data, options)
             } else {
               _val = _contents;
             }
@@ -478,7 +657,7 @@ function renderTemplateString(str, data, options){
 						
 					var conditionalExp = false
 					for (var i = 0; i < block.condExps.length; i++){ // Look for first true conditional expression
-						var conditionalResult = parseTemplateExpression(block.condExps[i], data, true); // resolveOptionalsToBoolean = true
+						var conditionalResult = renderExpression(block.condExps[i], data, options, true); // resolveOptionalsToBoolean = true
 						if (conditionalResult === true){
 							conditionalExp = block.condContents[i]; // Found
 							break;
@@ -492,11 +671,10 @@ function renderTemplateString(str, data, options){
 					}
           
           if (options.stripWhitespace == 'tags'){
-              
               conditionalExp = stripFirstAndLastLinebreaksIfEmpty(conditionalExp);
           }  
 
-					val = renderTemplateString(conditionalExp, data, options);
+					val = renderString(conditionalExp, data, options);
 					
 				} else if (block.type == LOGIC_BLOCK_TYPE_LOOP){
 					
@@ -532,7 +710,7 @@ function renderTemplateString(str, data, options){
 						saveExistingloopPropObjIndexAlias = utils.getObjPath(data, block.loopPropObjIndexAlias);
 					}
 
-					var loopSubject = parseTemplateExpression(block.loopSubject, data)
+					var loopSubject = renderExpression(block.loopSubject, data, options)
 
 					val = '';
 
@@ -544,7 +722,7 @@ function renderTemplateString(str, data, options){
 							if (keyAliasSet){
 								data[block.loopPropKeyAlias] = i;
 							}
-							val += renderTemplateString(block.loopContent, data, options);
+							val += renderString(block.loopContent, data, options);
               
               if (i < loopSubject.length - 1){
                 val += block.interContent
@@ -571,7 +749,7 @@ function renderTemplateString(str, data, options){
 								data[block.loopPropObjIndexAlias] = propIndex;
 							}
                         
-							val += renderTemplateString(block.loopContent, data, options);
+							val += renderString(block.loopContent, data, options);
               val += block.interContent;
 							delete data[block.loopPropValAlias];
 
@@ -628,8 +806,14 @@ function renderTemplateString(str, data, options){
       
 			
 	}
+  str = result;
+  
+  // Keep processing until all logic blocks are resolved
+	if (str != preStr){
+		return renderString(str, data, options);
+	}
 
-	return result;
+	return str;
 
 }
 
@@ -658,7 +842,7 @@ var BRACKET_OUT_ESCAPE = '__brOut';
 var OR_ESCAPE = '__or'
 var COMMA_IN_SIMPLE_BRACKET_ESCAPE = '__brComma';
 // var WHITESPACE_TMP_TAG_EXP = '__whitespace__'
-function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
+function renderExpression(exp, data, options, resolveOptionalsToBoolean = false) {
   
   /*
   if (exp == WHITESPACE_TMP_TAG_EXP) {
@@ -744,7 +928,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
           } else {
             // Found a bracket containing a top level filter, process this separately
             var bracketExp = m[2].substr(1,m[2].length-2);
-            data._tmp_vars.push(parseTemplateExpression(bracketExp, data));
+            data._tmp_vars.push(renderExpression(bracketExp, data, options));
             
             var val = '_tmp_vars[' + String(data._tmp_vars.length-1) + ']' // Use square brackets as result will be evaled;
           }
@@ -759,19 +943,27 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
     }
   }
   
-  
   // Resolve each filter expression separately as their own call to this function
   // Rolling the result to be processed on the next filter.
   // -----------------------------------------------------------------
   
   var filterSequence = exp.split('|');  
+  var tagSearchRegex = new RegExp(TPL_TAG_OPEN_REGSAFE, 'im')
   if (filterSequence.length > 1){
     
     var rollingResult = undefined;    
     for (var i = 0; i < filterSequence.length; i++){
       
-      if (i == 0){ // Index 0 will *usually* contain the seed value        
-        rollingResult = parseTemplateExpression(filterSequence[i], data);
+      if (i == 0){ // Index 0 will contain the seed value        
+        
+        rollingResult = renderExpression(filterSequence[i], data, options);
+        
+        // If the result has more tags to resolve then keep rendering.
+        // These need to be complete before applying filters.
+        while (tagSearchRegex.test(rollingResult)){ 
+          rollingResult = renderString(rollingResult, data, options);
+        }
+        
         //try {        
         //  
         //} catch(e){
@@ -787,7 +979,7 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
         if (filterParts.length > 1){
           filterArgs = filterArgs.concat(filterParts[1].split(','));
           for (var j = 1; j < filterArgs.length; j++){
-            filterArgs[j] = parseTemplateExpression(filterArgs[j], data);  // Result each arg      
+            filterArgs[j] = renderExpression(filterArgs[j], data, options);  // Result each arg      
           }        
         }
         rollingResult = filter.applyFilter(filterName, filterArgs);  
@@ -801,6 +993,26 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
   // Single expression parsing 
   // -------------------------
+  
+  // Ensure expressions referenced do not have unresolved tags
+  var varNameRegex = /([a-zA-Z_$]+[a-zA-Z_$0-9\[\].]*)/gim;
+  var m;
+  while ((m = varNameRegex.exec(exp)) !== null) {
+    if (m.index === varNameRegex.lastIndex) {
+      regex.lastIndex++;
+    }
+    var varPath = m[1];
+    var val = utils.getObjPath(data, varPath);
+		if (val != undefined){
+      var valPre = val;
+      while (tagSearchRegex.test(val)){ // Any tags?
+        val = renderString(val, data, options);
+      }
+      if (valPre != val){ // Save data for being evalulated later
+        setObjPathVal(data, varPath, val);
+      }
+    }
+  }
   
   // Replace escaped chars with real ones.
 
@@ -846,6 +1058,8 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
       
       try {
         
+        // console.log('prop',prop)
+        
         result = safeEval(prop, data); // Will throw error if invalid
       
       } catch(error) {
@@ -854,9 +1068,14 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
       
 		}
     
-    
 		if (result != undefined){      
 			// Found a result, exit optional search loop
+      
+      // If the result has more tags to resolve then keep rendering, saves having to do another whole pass later.
+      while (tagSearchRegex.test(result)){ 
+        result = renderString(result, data, options);
+      }
+      
 			break;
 		}
     
@@ -892,9 +1111,63 @@ function parseTemplateExpression(exp, data, resolveOptionalsToBoolean = false) {
 
 	// The result may have more expressions in them,
 	// If any further expressions are identified in the output then keep applying the template
-	
+
 	return result;
 
+}
+
+// ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
+
+// Path Utils
+// ----------
+
+function isPathValid(path){
+  
+  if (path.indexOf('\0') !== -1) { // Check Poison Null bytes
+      return false;
+  }
+  
+  if (!/^[-_.A-Za-z0-9\/]+$/.test(path)) {
+      return false;
+  }
+  
+  return true;
+  
+}
+
+function resolveIncludePathSync(incPath){
+  
+  for (var i = 0; i < includePaths.length; i++){
+    var fullPath = path.join(includePaths[i], incPath);
+    if (fullPath.indexOf(includePaths[i]) !== 0) { // Needs to be within include path
+      throw new Error('Invalid path');
+    }
+    if (fs.existsSync(fullPath)){
+      return fs.readFileSync(fullPath, 'utf8');
+    }
+  }
+  
+  throw new Error('Include path not found `'+incPath+'`');
+  
+}
+
+function resolveIncludePath(incPath){
+  
+  var pathSearch = [];
+  for (var i = 0; i < includePaths.length; i++){
+    var fullPath = path.join(includePaths[i], incPath);
+    if (fullPath.indexOf(includePaths[i]) !== 0) { // Needs to be within include path
+      throw new Error('Invalid path');
+    }
+    pathSearch.push(fileExistsPromise(fullPath));
+  }
+  
+  return Promise.any(pathSearch).then(function(fullPath){
+    
+    return readFilePromise(fullPath, 'utf8');
+    
+  })
+  
 }
 
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
@@ -941,11 +1214,17 @@ module.exports = jnr;
 jnr.__express = function(path, data, callback) {
 
 	fs.readFile(path, 'utf8', function read(err, tpl) {
+
 	  if (err) {
-	      throw err;
+	     callback(err);
 	  }
     
-	  callback(null, jnr.render(tpl, data));
+    jnr.renderPromise(tpl, data).then(function(render){
+      callback(null, render);
+    }, function(err){
+      callback(err);
+    });
+    
 	});
 		
 }
