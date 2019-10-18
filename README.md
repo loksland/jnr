@@ -411,7 +411,7 @@ Welcome
 ```
 
 ### Release history
-- v0.1.18 - Includes, pre sweep, resolving nested expressions. Updated docs and tests.
+- v0.1.18 - Includes, promise render, resolving nested expressions. Updated docs and tests.
 - v0.1.17 - Strip whitespace for tags improved.
 - v0.1.16 - Whitespace control added, default options, docs updated.
 - v0.1.15 - Global filters and docs update.
