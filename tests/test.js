@@ -2,8 +2,12 @@
 
 var jnr = require('../jnr');
 var path = require('path');
+
 jnr.registerIncludePath(path.join(__dirname,'inc'));
 jnr.registerIncludePath(path.join(__dirname,'inc2'));
+
+
+
 
 
 
@@ -1161,8 +1165,6 @@ var result = jnr.renderPromise(exp, data).then(function (render){
   }
   
 })
-
-
 
 // ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
 

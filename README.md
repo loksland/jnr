@@ -411,6 +411,8 @@ Welcome
 ```
 
 ### Release history
+- v0.1.20 - Memory cache for file loading, inc express views.
+- v0.1.19 - Express error handling bug fix.
 - v0.1.18 - Includes, promise render, resolving nested expressions. Updated docs and tests.
 - v0.1.17 - Strip whitespace for tags improved.
 - v0.1.16 - Whitespace control added, default options, docs updated.

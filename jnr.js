@@ -56,6 +56,7 @@ jnr.resetOptions = function(){
 jnr.resetOptions();
 
 
+
 var includePaths = [];
 jnr.registerIncludePath = function(dirPath){     
   if (!isPathValid(dirPath)) { // Check Poison Null bytes
@@ -117,33 +118,33 @@ jnr.render = function(obj, data = {}, options = null){
   _obj = preSweep(_obj, sweepData, options);
   _data = preSweep(_data, sweepData, options);
   
-  if (options.async && sweepData._incFilePaths){
+  if (options.async && sweepData._incFilePathRequests){
     
     // Resolve these paths before continuing
     
     var incPromises = [];
-    var incPaths = [];
+    var incFilePaths = [];
     
-    for (var incFilePath in sweepData._incFilePaths){
-      incPaths.push(incFilePath);
+    for (var incFilePath in sweepData._incFilePathRequests){
+      incFilePaths.push(incFilePath);
       incPromises.push(resolveIncludePath(incFilePath))
     }
     
     return Promise.all(incPromises).then(function(arr){
       
       for (var i = 0; i < arr.length; i++){
-        sweepData._incFilePaths[incPaths[i]] = arr[i];
+        saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePaths[i], arr[i]);
       }
       
-      _obj = preSweep(_obj, sweepData, options); // Will insert values back now
-      _data = preSweep(_data, sweepData, options); // Will insert values back now
+      _obj = preSweep(_obj, sweepData, options); // Will insert values back now from memory cache
+      _data = preSweep(_data, sweepData, options); // Will insert values back now from memory cache
       
       return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options))      
       
     });
     
-  }
-
+  } 
+  
   if (options.async){
     return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options));
   } else {
@@ -244,40 +245,43 @@ function preSweep(obj, data, options){
           incFilePath += DEFAULT_INC_EXT;
         }
         
+        incFilePath = path.join(incFilePath, '');
+        
         var val;
         
-        if (options.async){
+        var contents = getCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath);
+        
+        if (options.async && contents == undefined){
           
-          if (data._incFilePaths && typeof data._incFilePaths[incFilePath] === 'string'){ // 2nd sweep
-            
-            val = data._incFilePaths[incFilePath]; // Set data
-            
-          } else { // First sweep: Queue list of paths to load
+          // Request file contents to be loaded async.
           
-            val = '';
-            if (incFilters){
-              val += TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE;
-            } 
-            val += TPL_TAG_OPEN + '>' + incFilePath + TPL_TAG_CLOSE; // Will be replaced with content next sweep
-            if (incFilters){
-              val += TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
-            } 
-            
-            if (!data._incFilePaths){
-              data._incFilePaths = {};
-            }
-            data._incFilePaths[incFilePath] = true;
-            
+          val = '';
+          if (incFilters){
+            val += TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE;
+          } 
+          val += TPL_TAG_OPEN + '>' + incFilePath + TPL_TAG_CLOSE; // Will be replaced with content next sweep
+          if (incFilters){
+            val += TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+          } 
+          
+          if (!data._incFilePathRequests){
+            data._incFilePathRequests = {};
           }
-            
+          data._incFilePathRequests[incFilePath] = true;
+          
         } else {     
           
-          var incContents = resolveIncludePathSync(incFilePath);
-             
+          if (!options.async && contents == undefined) {
+            contents = resolveIncludePathSync(incFilePath);
+            saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath, contents);
+          }
+          
+          // Contents will always be set here.
+          
           if (incFilters){
-            val = TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE + incContents + TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+            val = TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE + contents + TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
           } else {        
-            val = incContents;   
+            val = contents;   
           } 
           
         }
@@ -1058,8 +1062,6 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
       
       try {
         
-        // console.log('prop',prop)
-        
         result = safeEval(prop, data); // Will throw error if invalid
       
       } catch(error) {
@@ -1135,15 +1137,16 @@ function isPathValid(path){
   
 }
 
-function resolveIncludePathSync(incPath){
+function resolveIncludePathSync(incPath){ // Cache aware
   
   for (var i = 0; i < includePaths.length; i++){
     var fullPath = path.join(includePaths[i], incPath);
     if (fullPath.indexOf(includePaths[i]) !== 0) { // Needs to be within include path
       throw new Error('Invalid path');
     }
-    if (fs.existsSync(fullPath)){
-      return fs.readFileSync(fullPath, 'utf8');
+    
+    if (fs.existsSync(fullPath)){      
+      return fs.readFileSync(fullPath, 'utf8');;
     }
   }
   
@@ -1163,10 +1166,29 @@ function resolveIncludePath(incPath){
   }
   
   return Promise.any(pathSearch).then(function(fullPath){
-    
     return readFilePromise(fullPath, 'utf8');
-    
   })
+  
+}
+
+
+// ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱ ✱
+// A very simple memory cache
+
+var CACHE_KEY_INC_FILEPATH_CONTENTS = 'inc'
+var CACHE_KEY_FULL_FILEPATH_CONTENTS = 'full'
+
+var cache = {}; 
+
+function saveCache(key, val){
+  
+  cache[key] = val;
+  
+}
+
+function getCache(key){
+  
+  return cache[key]
   
 }
 
@@ -1213,10 +1235,10 @@ module.exports = jnr;
 
 jnr.__express = function(path, data, callback) {
 
-	fs.readFile(path, 'utf8', function read(err, tpl) {
+  var readFileResult = function read(err, tpl) {
 
 	  if (err) {
-	     callback(err);
+	     return callback(err);
 	  }
     
     jnr.renderPromise(tpl, data).then(function(render){
@@ -1225,6 +1247,15 @@ jnr.__express = function(path, data, callback) {
       callback(err);
     });
     
-	});
+	}
+  
+  // Attempt to load view from cache.
+  var contents = getCache(CACHE_KEY_FULL_FILEPATH_CONTENTS + path);
+  if (contents != undefined){
+    readFileResult(null, contents);
+  } else {
+    fs.readFile(path, 'utf8', readFileResult);
+  }
+  
 		
 }
