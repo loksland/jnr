@@ -7,6 +7,16 @@ jnr.registerIncludePath(path.join(__dirname,'inc'));
 jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
+var data = {greeting:'hi', options: {filter:'uppercase'}};
+runTest({
+ttl:'Ensure data options aren\'t ignored',
+exp: `{{greeting}}`,
+data: data,
+eq: 'HI'
+});
+
+process.exit(1);
+
 
 var data = {x:'hi'};
 runTest({

@@ -73,7 +73,7 @@ jnr.renderPromise = function(obj, data, options = {}){
     
 }
 
-jnr.render = function(obj, data = {}, options = null){
+jnr.render = function(obj, data = {}, options = {}){
   
   var _data = dupe(data); // Create a duplicate data to work with
   var _obj = dupe(obj); // Duplicate the template to keep original
@@ -88,14 +88,13 @@ jnr.render = function(obj, data = {}, options = null){
   
   
   var _options = options;
-  if (!_options && data.options){
-    _options = data.options;
+  if (data.options){
+    _options = Object.assign(data.options, _options); // Overwrite data.options with custom options
+    delete data.options;
   }
   options = dupe(jnr.options);
-  if (_options){
-    // Overwrite default options with custom options
-    options = Object.assign(options, _options); 
-  } 
+  options = Object.assign(options, _options);  // Overwrite default options with custom options
+  
   
   // Clean up options
   

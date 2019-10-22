@@ -284,7 +284,7 @@ ITEM 3 PRICE IS $5.43
 TOTAL IS $9.08
 ```
 
-### Includes (partials)
+### File includes (partials)
 
 Template data can be loaded from other files efficiently using the syntax `{{>filename.ext}}`.
 
@@ -312,11 +312,15 @@ Filters can be applied to the result.
 {{>footer.md|filter1|filter2}}
 ```
 
+Included files can include other files if required.
+
 To perform the file operations using async operations, use the `renderPromise` method. 
 
 ```node 
 jnr.renderPromise(tpl, data, options).then(console.log, console.error);
 ```
+
+The contents of each file path are stored in memory for future reference by the `jnr` instance.
 
 ### Options 
 
@@ -331,10 +335,14 @@ Calling `jnr.resetOptions()` will revert `jnr.options` back to default settings.
 Options can also be custom set for each render by passing in as an argument. 
 These will override the global options.
 
+```node 
+jnr.render(template, data, {filter:'clean|md', stripWhitespace:'tags'})
+```
+
 Options can also be included as a top level property of the data parameter.
 
 ```node 
-jnr.render(template, data, {filter:'clean|md', stripWhitespace:'tags'})
+jnr.render(template, {var:'abc', options:{filter:'clean|md', stripWhitespace:'tags'})
 ```
 
 **options.filter**
@@ -413,6 +421,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.24 - Render promise option overwrite bugfix.
 - v0.1.23 - Whitespace `tags` mode now collapses tabs. Single char var names not rendering bug fix.
 - v0.1.22 - Unresolved includes now throw error, nested include support added.
 - v0.1.20 - Memory cache for file loading, inc express views.
