@@ -122,26 +122,38 @@ jnr.render = function(obj, data = {}, options = null){
     
     // Resolve these paths before continuing
     
-    var incPromises = [];
-    var incFilePaths = [];
-    
-    for (var incFilePath in sweepData._incFilePathRequests){
-      incFilePaths.push(incFilePath);
-      incPromises.push(resolveIncludePath(incFilePath))
+    var resolveAsyncIncPaths = function(){
+      
+      var incPromises = [];
+      var incFilePaths = [];
+      
+      for (var incFilePath in sweepData._incFilePathRequests){
+        incFilePaths.push(incFilePath);
+        incPromises.push(resolveIncludePath(incFilePath))
+      }
+      delete sweepData._incFilePathRequests; 
+      
+      return Promise.all(incPromises).then(function(arr){
+        
+        // Save contents to cache
+        for (var i = 0; i < arr.length; i++){
+          saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePaths[i], arr[i]);
+        }
+        
+        _obj = preSweep(_obj, sweepData, options); // Will insert values back now from memory cache, may queue more incs
+        _data = preSweep(_data, sweepData, options); // Will insert values back now from memory cache, may queue more incs
+        
+        if (sweepData._incFilePathRequests){ // More requests? (nested includes)
+          return resolveAsyncIncPaths(); // Keep looping, return self again
+        }
+        
+        return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options)); // Complete
+        
+      });
+      
     }
     
-    return Promise.all(incPromises).then(function(arr){
-      
-      for (var i = 0; i < arr.length; i++){
-        saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePaths[i], arr[i]);
-      }
-      
-      _obj = preSweep(_obj, sweepData, options); // Will insert values back now from memory cache
-      _data = preSweep(_data, sweepData, options); // Will insert values back now from memory cache
-      
-      return Promise.resolve(postRender(renderTemplate(_obj, _data, options), _data, options))      
-      
-    });
+    return resolveAsyncIncPaths();
     
   } 
   
@@ -221,74 +233,88 @@ function preSweep(obj, data, options){
     
     // Includes 
     // --------
-
-    var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '>(.*?)(\\|.*?)?' + TPL_TAG_CLOSE_REGSAFE, 'gim');
-
-    var origStr = str;
-    var m;
-    var indexOffset = 0;
-    var incPromises = [];  
-    while ((m = regex.exec(origStr)) !== null) {
-        
-        if (m.index === regex.lastIndex) {
-            regex.lastIndex++;
-        }
+    
+    var nestedSyncIncsFound = true; // 
+    
+    while(nestedSyncIncsFound){
       
-        var incFilePath = String(m[1]).trim();      
-        var incFilters = m[2];
+      nestedSyncIncsFound = false;
+      
+      var regex = new RegExp(TPL_TAG_OPEN_REGSAFE + '>(.*?)(\\|.*?)?' + TPL_TAG_CLOSE_REGSAFE, 'gim');
+      var regexTest = new RegExp(TPL_TAG_OPEN_REGSAFE + '>(.*?)(\\|.*?)?' + TPL_TAG_CLOSE_REGSAFE, 'im');
+    
+      var origStr = str;
+      var m;
+      var indexOffset = 0;
+      var incPromises = [];  
+      while ((m = regex.exec(origStr)) !== null) {
+          
+          if (m.index === regex.lastIndex) {
+              regex.lastIndex++;
+          }
+        
+          var incFilePath = String(m[1]).trim();      
+          var incFilters = m[2];
 
-        if (!isPathValid(incFilePath)) { 
-            throw new Error('Invalid path `'+incFilePath+'`')
-        }
-        
-        if (path.extname(incFilePath) == ''){
-          incFilePath += DEFAULT_INC_EXT;
-        }
-        
-        incFilePath = path.join(incFilePath, '');
-        
-        var val;
-        
-        var contents = getCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath);
-        
-        if (options.async && contents == undefined){
-          
-          // Request file contents to be loaded async.
-          
-          val = '';
-          if (incFilters){
-            val += TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE;
-          } 
-          val += TPL_TAG_OPEN + '>' + incFilePath + TPL_TAG_CLOSE; // Will be replaced with content next sweep
-          if (incFilters){
-            val += TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
-          } 
-          
-          if (!data._incFilePathRequests){
-            data._incFilePathRequests = {};
-          }
-          data._incFilePathRequests[incFilePath] = true;
-          
-        } else {     
-          
-          if (!options.async && contents == undefined) {
-            contents = resolveIncludePathSync(incFilePath);
-            saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath, contents);
+          if (!isPathValid(incFilePath)) { 
+              throw new Error('Invalid path `'+incFilePath+'`')
           }
           
-          // Contents will always be set here.
+          if (path.extname(incFilePath) == ''){
+            incFilePath += DEFAULT_INC_EXT;
+          }
           
-          if (incFilters){
-            val = TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE + contents + TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
-          } else {        
-            val = contents;   
-          } 
+          incFilePath = path.join(incFilePath, '');
           
-        }
-        
-        str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
-        indexOffset += String(val).length - m[0].length;
-        
+          var val;
+          
+          var contents = getCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath);
+          
+          if (options.async && contents == undefined){
+            
+            // Request file contents to be loaded async.
+            
+            val = '';
+            if (incFilters){
+              val += TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE;
+            } 
+            val += TPL_TAG_OPEN + '>' + incFilePath + TPL_TAG_CLOSE; // Will be replaced with content next sweep
+            if (incFilters){
+              val += TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+            } 
+            
+            if (!data._incFilePathRequests){
+              data._incFilePathRequests = {};
+            }
+            data._incFilePathRequests[incFilePath] = true;
+            
+          } else {  // Found data
+            
+            if (!options.async && contents == undefined) { // Load sync
+              contents = resolveIncludePathSync(incFilePath);
+              if (regexTest.test(contents)){
+                nestedSyncIncsFound = true; // Will keep looping and resolving
+              }
+              saveCache(CACHE_KEY_INC_FILEPATH_CONTENTS + incFilePath, contents);
+            } else if (options.async && regexTest.test(contents)) {
+              nestedSyncIncsFound = true; // Send back to queue more promise requests
+            }
+            
+            // Contents will always be set here.
+            
+            if (incFilters){
+              val = TPL_TAG_OPEN + 'filter' + incFilters + TPL_TAG_CLOSE + contents + TPL_TAG_OPEN + '/filter' + TPL_TAG_CLOSE;
+            } else {        
+              val = contents;   
+            } 
+            
+          }
+          
+          str = str.substr(0, m.index+indexOffset) + String(val) + str.substr(m.index+indexOffset + m[0].length);
+          indexOffset += String(val).length - m[0].length;
+          
+      }
+      
     }
     
   }
@@ -857,6 +883,11 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
   exp = String(exp).trim(); 
 	var origExp = exp;
   
+  if (exp.charAt(0) == '>'){
+    throw new Error('Couldn\'t resolve include `'+exp+'`');
+  }
+  
+  
   // 1) Filters are considered first unless wrapped in brackets
   // - Defer ternary operations to eval
   // - Defer logical operations to eval
@@ -1234,12 +1265,19 @@ function escapeRegex(str){
 module.exports = jnr;
 
 jnr.__express = function(path, data, callback) {
-
+  
+  var contents = getCache(CACHE_KEY_FULL_FILEPATH_CONTENTS + path);
+  var cacheFound = contents != undefined;
+  
   var readFileResult = function read(err, tpl) {
 
 	  if (err) {
 	     return callback(err);
 	  }
+    
+    if (!cacheFound){
+      saveCache(CACHE_KEY_FULL_FILEPATH_CONTENTS + path, tpl)
+    }
     
     jnr.renderPromise(tpl, data).then(function(render){
       callback(null, render);
@@ -1250,8 +1288,8 @@ jnr.__express = function(path, data, callback) {
 	}
   
   // Attempt to load view from cache.
-  var contents = getCache(CACHE_KEY_FULL_FILEPATH_CONTENTS + path);
-  if (contents != undefined){
+  
+  if (cacheFound){
     readFileResult(null, contents);
   } else {
     fs.readFile(path, 'utf8', readFileResult);

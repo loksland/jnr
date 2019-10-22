@@ -411,6 +411,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.21 - Unresolved includes now throw error, nested include support added.
 - v0.1.20 - Memory cache for file loading, inc express views.
 - v0.1.19 - Express error handling bug fix.
 - v0.1.18 - Includes, promise render, resolving nested expressions. Updated docs and tests.

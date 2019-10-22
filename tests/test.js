@@ -7,9 +7,13 @@ jnr.registerIncludePath(path.join(__dirname,'inc'));
 jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
-
-
-
+var data = {};
+runTest({
+ttl:'Sync nested include',
+exp: `{{>inc-bar|lowercase}}`,
+data: data,
+eq: '[inc:(i am bar)]'
+});
 
 
 var data = {foo:'{{>foo|uppercase}}', bar:'{{>bar}}'};
@@ -1150,15 +1154,41 @@ eq: 'My name is Laurence'
 
 var title = 'Async includes with filters';
 var data = {foo:'{{>foo|uppercase}}', bar:'{{>bar}}'};
-var exp = ` {{>foo.jnr}}{{foo}}{{>bar|lowercase}}{{bar}}`;
+var exp = `{{>foo.jnr}}{{foo}}{{>bar|lowercase}}{{bar}}`;
 console.log('\n`'+title+'` test...');
 var result = jnr.renderPromise(exp, data).then(function (render){
-  var pass = render = '(I Am Foo)(I AM FOO)(i am bar)(I Am Bar)';
+  var pass = render == '(I Am Foo)(I AM FOO)(i am bar)(I Am Bar)';
+  console.log(render)
   console.log((pass ? 'OK' : 'FAIL'));
   return pass;
 }, function(error){
   throw new Error('Test failed for `'+exp+'`');
-}).then(function(pass){
+})
+
+
+
+
+result = result.then(function(pass){
+  
+  var title = 'Async nested includes';
+  var data = {};
+  var exp = `GOT:{{>inc-bar|uppercase}}`;
+  console.log('\n`'+title+'` test...');
+  return jnr.renderPromise(exp, data).then(function (render){
+    var pass = render == 'GOT:[INC:(I AM BAR)]';
+    console.log(render)
+    console.log((pass ? 'OK' : 'FAIL'));
+    return pass;
+  }, function(error){
+    throw new Error('Test failed for `'+exp+'`');
+  })
+  
+})
+
+
+
+
+result = result.then(function(pass){
   
   if (pass){    
     console.log('\nALL PASS\n');
