@@ -1,3 +1,12 @@
+
+
+
+if filter data type is `arr!` it will be converted to arr before processing.
+
+
+
+
+
 {{if A}}
 
   This content

@@ -7,6 +7,74 @@ jnr.registerIncludePath(path.join(__dirname,'inc'));
 jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
+
+var data = {x:'hi'};
+runTest({
+ttl:'Variables 1 char long fail to render bug.',
+exp: `{{x}}`,
+data: data,
+eq: 'hi'
+});
+
+var title = 'Tab collapsing';
+var data = {names:['Jon','Benny'],name:'Susan', options:{stripWhitespace:'tags'}};
+var exp = `Tab kill:
+  {{if name=='Susan'}}   
+    hello    
+    there
+  {{/if}}
+  {{each names as name}}
+  - {{name}}
+  {{/each}}
+{{filter|uppercase}}
+{{name}}
+{{/filter}}
+{{set x=name|lowercase}}
+{{x}}`;
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data);
+var pass = result == `Tab kill:
+hello    
+there
+- Jon
+- Benny
+SUSAN
+susan`
+console.log(exp)
+console.log('`' + result + '`')
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+exp+'`');
+}
+
+
+
+
+var title = 'Options supplied as top level data param';
+var data = {firstName:'Susan', options:{stripWhitespace:true}};
+var exp = `    {{set name=firstName + 'S'}} {{set name=firstName + 'S'}}
+  {{if name=='SusanS'}}   
+        hello    
+
+
+{{/if}}
+there     
+{{set tmp=123+123}}   
+
+
+
+{{set tmp=123+123}}      `;
+console.log('\n`'+title+'` test...');
+var result = jnr.render(exp, data);
+var pass = result == 'hello\nthere';
+console.log(exp)
+console.log('`' + result + '`')
+console.log((pass ? 'OK' : 'FAIL'));
+if (!pass){    
+  throw new Error('Test failed for `'+exp+'`');
+}
+
+
 var data = {};
 runTest({
 ttl:'Sync nested include',

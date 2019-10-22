@@ -2,16 +2,16 @@
 
 A simple and powerful templating engine that supports:
  - optional chaining
- - includes (partials)
+ - file includes (partials)
+ - [custom processing filters](docs/filters.md)
+ - block capture
+ - Express support 
+ - expression evaluation
  - conditional logic
  - nested data sources
  - non-string templates
  - ternary operators
  - looping control flow 
- - [custom processing filters](docs/filters.md)
- - expression evaluation
- - block capture
- - support for express 
 
 ### Installation
 
@@ -331,6 +331,8 @@ Calling `jnr.resetOptions()` will revert `jnr.options` back to default settings.
 Options can also be custom set for each render by passing in as an argument. 
 These will override the global options.
 
+Options can also be included as a top level property of the data parameter.
+
 ```node 
 jnr.render(template, data, {filter:'clean|md', stripWhitespace:'tags'})
 ```
@@ -348,7 +350,7 @@ jnr.render(template, data, {filter:'clean|md'})
 This option defines how whitespace will be handled by rendering.
 
 - `'all'` or `true` Aggressively remove whitespace from all rendered strings using the option property `stripWhitespace`. This will apply the string filter `stripWhitespace` after rendering and applying any global filters.
-- `'tags'` Remove whitespace created by template tag declarations only.
+- `'tags'` Remove whitespace created by template tag declarations, will also collapse tabs contained within `set`,`if`,`else` clauses.
 - `'none'` or `false` No changes to whitespace will be made.
   
 ```node 
@@ -411,7 +413,8 @@ Welcome
 ```
 
 ### Release history
-- v0.1.21 - Unresolved includes now throw error, nested include support added.
+- v0.1.23 - Whitespace `tags` mode now collapses tabs. Single char var names not rendering bug fix.
+- v0.1.22 - Unresolved includes now throw error, nested include support added.
 - v0.1.20 - Memory cache for file loading, inc express views.
 - v0.1.19 - Express error handling bug fix.
 - v0.1.18 - Includes, promise render, resolving nested expressions. Updated docs and tests.

@@ -88,6 +88,9 @@ jnr.render = function(obj, data = {}, options = null){
   
   
   var _options = options;
+  if (!_options && data.options){
+    _options = data.options;
+  }
   options = dupe(jnr.options);
   if (_options){
     // Overwrite default options with custom options
@@ -372,11 +375,7 @@ function renderTemplate(obj, data, options){
     // --------------
     
     str = renderString(str, data, options);
-    
-    //if (options.stripWhitespace == 'tags'){      
-    //  str = str.replace(new RegExp(TPL_TAG_OPEN_REGSAFE+WHITESPACE_TMP_TAG_EXP+TPL_TAG_CLOSE_REGSAFE, 'gim'), '');
-    //}
-    
+        
     if (options.filter.length > 0){
       if (options.filter.charAt(0) != '|'){ // Ensure leading pipe
         options.filter = '|' + options.filter;
@@ -619,15 +618,16 @@ function renderString(str, data, options){
 	// ------------------------------------
 	
 	var result = str;
-	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/].+?)'+TPL_TAG_CLOSE_REGSAFE;
+	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/].*?)'+TPL_TAG_CLOSE_REGSAFE;
 	var regex = new RegExp(regexStr, 'gim');
-	
+
 	// - Don't match expressions with a / at the start to avoid matiching /if /each 
 	// - Don't match if the expression = `else`
 	
 	var m;
 	var indexOffset = 0;
 	while ((m = regex.exec(str)) !== null) {
+
 
 			if (m.index === regex.lastIndex) {
 					regex.lastIndex++;
@@ -655,7 +655,7 @@ function renderString(str, data, options){
             
             if (options.stripWhitespace == 'tags'){
                 valLineCanBeRemoved = !block.output; // Set capture
-                block.captureContents = stripFirstAndLastLinebreaksIfEmpty(block.captureContents);
+                block.captureContents = collapseTabs(stripFirstAndLastLinebreaksIfEmpty(block.captureContents));
             }  
             
             var _contents = renderString(block.captureContents, data, options)
@@ -701,7 +701,7 @@ function renderString(str, data, options){
 					}
           
           if (options.stripWhitespace == 'tags'){
-              conditionalExp = stripFirstAndLastLinebreaksIfEmpty(conditionalExp);
+              conditionalExp = collapseTabs(stripFirstAndLastLinebreaksIfEmpty(conditionalExp));
           }  
 
 					val = renderString(conditionalExp, data, options);
@@ -712,7 +712,7 @@ function renderString(str, data, options){
           
           if (options.stripWhitespace == 'tags'){
               // If leading or traling line break, display one item per line.
-              var loopContentStripped = stripFirstAndLastLinebreaksIfEmpty(block.loopContent);
+              var loopContentStripped = collapseTabs(stripFirstAndLastLinebreaksIfEmpty(block.loopContent));
               block.interContent = (loopContentStripped.length != block.loopContent.length) ? '\n' : ''
               block.loopContent = loopContentStripped;
           }  
@@ -839,6 +839,7 @@ function renderString(str, data, options){
   str = result;
   
   // Keep processing until all logic blocks are resolved
+
 	if (str != preStr){
 		return renderString(str, data, options);
 	}
@@ -862,9 +863,17 @@ function stripEmptyFirstLine(str, removeFirstLineBreak){ //
   return str.replace(/(?:^[\t ]*?(\n|$))/gi, removeFirstLineBreak ? '' : '$1'); // NOTE: Considers a single line as the first line
 }
 
+
+
 function stripFirstAndLastLinebreaksIfEmpty(str){
-  return str.replace(/(^[\t ]*?\n)|(\n[\t ]*?$)/gi, '');
+  str = str.replace(/(^[\t ]*?\n)|(\n[\t ]*?$)/gi, '');
+  return str;
 }
+function collapseTabs(str){
+  str = str.replace(/^\s+/gmi, '');
+  return str;
+}
+
 
 //var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
 var BRACKET_IN_ESCAPE = '__brIn'; 
@@ -1055,6 +1064,7 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
   exp = exp.split(BRACKET_OUT_ESCAPE).join(')');
   exp = exp.split(OR_ESCAPE).join('||');
   exp = exp.split(COMMA_IN_SIMPLE_BRACKET_ESCAPE).join(',');
+  
 
 	var isNot = false;
 	if (exp.length > 0){
