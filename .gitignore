@@ -63,3 +63,5 @@ typings/
 .DS_Store
 
 _nogit/
+
+publish.command

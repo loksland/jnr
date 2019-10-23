@@ -6,6 +6,48 @@ var path = require('path');
 jnr.registerIncludePath(path.join(__dirname,'inc'));
 jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
+// env == prod then don't throw errors
+
+
+
+var data = {greeting:'hi', options:{stripWhitespace:true}};
+runTest({
+ttl:'Simple set += operation',
+exp: `
+
+{{set js=greeting + 'A'}}
+{{set js+=greeting + 'B'}}
+
+{{js}}
+
+`,
+data: data,
+eq: 'hiAhiB'
+});
+
+
+var data = {greeting:'hi', options:{stripWhitespace:true}};
+runTest({
+ttl:'Set +=... operation',
+exp: `
+
+{{set js=...}}
+{{greeting}}A
+{{/set}}
+
+{{set js+=...}}
+{{greeting}}B
+{{/set}}
+
+{{js}}
+
+`,
+data: data,
+eq: 'hiA\nhiB'
+});
+
+
+
 
 var data = {greeting:'hi', options: {filter:'uppercase'}};
 runTest({
@@ -15,7 +57,7 @@ data: data,
 eq: 'HI'
 });
 
-process.exit(1);
+
 
 
 var data = {x:'hi'};

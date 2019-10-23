@@ -284,6 +284,9 @@ ITEM 3 PRICE IS $5.43
 TOTAL IS $9.08
 ```
 
+Plus equal (`+=`) assignment is supported, eg. `{{set receipt+=...}}`.
+
+
 ### File includes (partials)
 
 Template data can be loaded from other files efficiently using the syntax `{{>filename.ext}}`.
@@ -421,6 +424,7 @@ Welcome
 ```
 
 ### Release history
+- v0.1.25 - `+=` assignment support for set.
 - v0.1.24 - Render promise option overwrite bugfix.
 - v0.1.23 - Whitespace `tags` mode now collapses tabs. Single char var names not rendering bug fix.
 - v0.1.22 - Unresolved includes now throw error, nested include support added.

@@ -407,7 +407,8 @@ function renderString(str, data, options){
 	// Simple set 
 	// ----------
 	
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=(?:(?!\\.\\.\\.))(.*?)'+TPL_TAG_CLOSE_REGSAFE;
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=(?:(?!\\.\\.\\.))(.*?)'+TPL_TAG_CLOSE_REGSAFE;
+
 	var regex = new RegExp(regexStr, 'gim');
   
 	var origStr = str;
@@ -423,8 +424,16 @@ function renderString(str, data, options){
 			
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = m[1];
+
+      
+      block.setVarOperation = false;
+      if (m[2] != undefined && m[2] == '+'){
+        block.setVarOperation = '+=';
+      }
+      
+      
 			block.captureContents = false;
-      block.expressionContents = m[2]; 
+      block.expressionContents = m[3]; 
 			block.captureFilterListStr = false;  // Filter is included in block.expressionContents for simple setTags
       block.output = false;			
 			block.index = data._logic_blocks.length;
@@ -458,6 +467,7 @@ function renderString(str, data, options){
       
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = false;
+      block.setVarOperation = false;
 			block.captureFilterListStr = m[1] == undefined ? false : m[1] // Pipe at char 0
 			block.captureContents = m[2];
       block.expressionContents = false;
@@ -475,7 +485,8 @@ function renderString(str, data, options){
 	// Set capture block
 	// -----------------
   
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=]+)\\=\\.\\.\\.(\\|.*?)*'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=\\.\\.\\.(\\|.*?)*'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
+
 	var regex = new RegExp(regexStr, 'gim');
 
 	var origStr = str;
@@ -491,8 +502,14 @@ function renderString(str, data, options){
 			
 			block.type = LOGIC_BLOCK_TYPE_SET_CAPTURE;
 			block.setVarPath = m[1];
-			block.captureFilterListStr = m[2] == undefined ? false : m[2] // Pipe at char 0
-			block.captureContents = m[3];
+      
+      block.setVarOperation = false;
+      if (m[2] != undefined && m[2] == '+'){
+        block.setVarOperation = '+=';
+      }
+      
+			block.captureFilterListStr = m[3] == undefined ? false : m[3] // Pipe at char 0
+			block.captureContents = m[4];
       block.expressionContents = false;
 			block.output = false;
 			
@@ -672,7 +689,13 @@ function renderString(str, data, options){
           }
           
 					if (block.setVarPath !== false){
-						data = setObjPathVal(data, block.setVarPath, _val);					
+            
+            if (block.setVarOperation == '+='){ // Plus equal assignment
+              data = setObjPathVal(data, block.setVarPath, utils.getObjPath(data, block.setVarPath) + _val);					
+            } else {
+              data = setObjPathVal(data, block.setVarPath, _val);					
+            }            
+						
 					}					
 					val = block.output ? _val : '';
           
