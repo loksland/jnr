@@ -1,6 +1,6 @@
 {
   "name": "jnr",
-  "version": "0.1.25",
+  "version": "0.1.27",
   "description": "A simple and powerful templating system supporting conditional logic, optional chaining, nested data sources, non string templates, ternary operators, looping control flow and custom processing functions.",
   "main": "jnr.js",
   "scripts": {
@@ -27,9 +27,11 @@
   "homepage": "https://github.com/loksland/jnr#readme",
   "dependencies": {
     "bluebird": "^3.7.1",
+    "clean-css": "^4.2.1",
     "js-yaml": ">=3.13.1",
     "markdown-it": "^10.0.0",
     "moment": "^2.24.0",
-    "safe-eval": "^0.4.1"
+    "safe-eval": "^0.4.1",
+    "uglify-js": "^3.6.3"
   }
 }

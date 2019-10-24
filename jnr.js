@@ -86,10 +86,9 @@ jnr.render = function(obj, data = {}, options = {}){
 		_data._tmp_vars = [];
 	}
   
-  
   var _options = options;
   if (data.options){
-    _options = Object.assign(data.options, _options); // Overwrite data.options with custom options
+    _options = Object.assign(_options, data.options); // Overwrite options param with any defined data.options
     delete data.options;
   }
   options = dupe(jnr.options);
@@ -407,7 +406,7 @@ function renderString(str, data, options){
 	// Simple set 
 	// ----------
 	
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=(?:(?!\\.\\.\\.))(.*?)'+TPL_TAG_CLOSE_REGSAFE;
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=(?:(?!\\.\\.\\.))(.*?\\}*)'+TPL_TAG_CLOSE_REGSAFE;
 
 	var regex = new RegExp(regexStr, 'gim');
   
@@ -451,7 +450,7 @@ function renderString(str, data, options){
 	// Filter block
 	// ------------
 	// Just like a set capture block though is outputted immediately
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'filter(\\|.*?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'filter(\\|.*?\\}?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE
 	var regex = new RegExp(regexStr, 'gim') 
   
 	var origStr = str;
@@ -485,8 +484,8 @@ function renderString(str, data, options){
 	// Set capture block
 	// -----------------
   
-  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=\\.\\.\\.(\\|.*?)*'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
-
+  var regexStr = TPL_TAG_OPEN_REGSAFE + 'set ([^=+]+)(\\+)?\\=\\.\\.\\.(\\|.*?\\}?)*'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/set'+TPL_TAG_CLOSE_REGSAFE
+  
 	var regex = new RegExp(regexStr, 'gim');
 
 	var origStr = str;
@@ -634,8 +633,9 @@ function renderString(str, data, options){
 	// ------------------------------------
 	
 	var result = str;
-	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/].*?)'+TPL_TAG_CLOSE_REGSAFE;
+	var regexStr = TPL_TAG_OPEN_REGSAFE+'(?!else)([^/].*?}*)'+TPL_TAG_CLOSE_REGSAFE;
 	var regex = new RegExp(regexStr, 'gim');
+
 
 	// - Don't match expressions with a / at the start to avoid matiching /if /each 
 	// - Don't match if the expression = `else`
@@ -885,8 +885,6 @@ function stripEmptyFirstLine(str, removeFirstLineBreak){ //
   return str.replace(/(?:^[\t ]*?(\n|$))/gi, removeFirstLineBreak ? '' : '$1'); // NOTE: Considers a single line as the first line
 }
 
-
-
 function stripFirstAndLastLinebreaksIfEmpty(str){
   str = str.replace(/(^[\t ]*?\n)|(\n[\t ]*?$)/gi, '');
   return str;
@@ -896,12 +894,16 @@ function collapseTabs(str){
   return str;
 }
 
-
 //var RELATIONAL_OPERATORS = ['==','!=','>=','<=','<','>']; // Order is important
 var BRACKET_IN_ESCAPE = '__brIn'; 
 var BRACKET_OUT_ESCAPE = '__brOut';
 var OR_ESCAPE = '__or'
-var COMMA_IN_SIMPLE_BRACKET_ESCAPE = '__brComma';
+
+var CURLY_BRACKET_IN_ESCAPE = '__cbrIn'; 
+var CURLY_BRACKET_OUT_ESCAPE = '__cbrOut';
+var COLON_ESCAPE = '__cln'
+
+var COMMA_ESCAPE = '__comma';
 // var WHITESPACE_TMP_TAG_EXP = '__whitespace__'
 function renderExpression(exp, data, options, resolveOptionalsToBoolean = false) {
   
@@ -968,13 +970,38 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
   
   exp = exp.replace(/\|\|/g, OR_ESCAPE);
   
+  // Recursively weed out top level curly brackets 
+  // Colons and commas within break filter arg prefix
+  if (exp.includes(`{`) ){ // Pre check to quickly bypass non-targeted expressions
+    var regex = new RegExp(/({[^{}]*})/gi);
+    var keepLooping = true;
+    while(keepLooping){
+      var startingExp = exp;
+      var m;
+      var indexOffset = 0;
+      while ((m = regex.exec(startingExp)) !== null) {
+          if (m.index === regex.lastIndex) {
+              regex.lastIndex++;
+          }
+          if (m[1] !== undefined){
+            // Found a simple curly bracket, replace all commas and colons with placeholders
+            var val = CURLY_BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2).split(':').join(COLON_ESCAPE).split(',').join(COMMA_ESCAPE) + CURLY_BRACKET_OUT_ESCAPE
+          } 
+          exp = exp.substr(0, m.index+indexOffset) + val + exp.substr(m.index+indexOffset + m[0].length);
+          indexOffset += String(val).length - m[0].length;
+      }
+      keepLooping = exp != startingExp;
+    }
+  }
+  
+  
   // 2) Seach for a filter inside a top level bracket.
   //    - Weed out simple brackets, looking for filter pipes.
   
   if (exp.includes(`|`) && exp.includes(`(`)){ // Pre check to quickly bypass non-targeted expressions
     
     var regex = new RegExp(/(\([^()|]*\))|(\([^()]*\))/gi);
-    
+  
     var keepLooping = true;
     
     while(keepLooping){
@@ -990,7 +1017,7 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
           
           if (m[1] !== undefined){
             // Found a simple bracket, replace with placeholder char
-            var val = BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2).split(',').join(COMMA_IN_SIMPLE_BRACKET_ESCAPE) + BRACKET_OUT_ESCAPE
+            var val = BRACKET_IN_ESCAPE + m[1].substr(1,m[1].length-2).split(',').join(COMMA_ESCAPE) + BRACKET_OUT_ESCAPE
           } else {
             // Found a bracket containing a top level filter, process this separately
             var bracketExp = m[2].substr(1,m[2].length-2);
@@ -1085,7 +1112,10 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
   exp = exp.split(BRACKET_IN_ESCAPE).join('(');
   exp = exp.split(BRACKET_OUT_ESCAPE).join(')');
   exp = exp.split(OR_ESCAPE).join('||');
-  exp = exp.split(COMMA_IN_SIMPLE_BRACKET_ESCAPE).join(',');
+  exp = exp.split(COMMA_ESCAPE).join(',');
+  exp = exp.split(COLON_ESCAPE).join(':');
+  exp = exp.split(CURLY_BRACKET_IN_ESCAPE).join('{');
+  exp = exp.split(CURLY_BRACKET_OUT_ESCAPE).join('}');
   
 
 	var isNot = false;

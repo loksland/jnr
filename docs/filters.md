@@ -171,6 +171,54 @@ Outputs supplied array as a list sentence.
 Donatello, Raphael, Michaelangelo and Leonardo
 ```
 
+**str.jsmin**   
+
+Minifies supplied javascript using the [uglify-js](https://www.npmjs.com/package/uglify-js) library.
+Accepts option object parameter (optional), documentation [here](https://www.npmjs.com/package/uglify-js#minify-options-structure).
+``` 
+{{set js=...|jsmin:{toplevel:true}}}
+var foo = 'tmp';
+console.log(foo);
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/set}}
+<script>
+{{js}}
+</script>
+```
+
+``` 
+<script>
+console.log("tmp"),console.log(55);
+</script>
+```
+
+
+**str.jsmin**   
+
+Minifies supplied css using the [clean-css](https://www.npmjs.com/package/clean-css) library.
+Accepts option object parameter (optional), documentation [here](https://www.npmjs.com/package/clean-css#formatting-options).
+``` 
+<style>
+{{filter|cssmin}}
+a.myclass = {
+  background-color: #ff3300;
+  text-decoration: none;
+  font-weight:bold;  
+}
+{{/filter}}
+</style>
+```
+
+``` 
+<style>
+a.myclass ={background-color:#f30;text-decoration:none;font-weight:700}
+</style>
+```
+
 ### Registering custom filters 
 
 Custom filters can be registered using `jnr.registerFilter(%data_type%, %filter_name%, %filter_function%)`.

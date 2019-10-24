@@ -2,7 +2,10 @@
 
 var moment = require('moment');
 var yaml = require('js-yaml');
+var UglifyJS = require('uglify-js');
+var CleanCSS = require('clean-css');
 var utils = require('./utils');
+
 
 function filter(){
 }
@@ -220,6 +223,32 @@ FILTERS.str.lowercase = function(str){
 FILTERS.str.hyphenate = function(str){
 	return str.replace(new RegExp(/\s+/igm), '-');
 }
+FILTERS.str.jsmin = function(str, options){
+  options = typeof options !== 'undefined' ? options : {}
+  // Options: https://www.npmjs.com/package/uglify-js
+  var result = UglifyJS.minify(str, options);
+  if (result.error){
+    throw error;
+  } 
+	return result.code;
+}
+ 
+FILTERS.str.cssmin = function(str, options){
+  
+  options = typeof options !== 'undefined' ? options : {level: 2}
+  
+  // Options: https://www.npmjs.com/package/clean-css
+  var result = new CleanCSS(options).minify(str);
+  
+  if (result.errors.length > 0){
+    throw result.errors[0];
+  } 
+	return result.styles;
+  
+}
+
+
+
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

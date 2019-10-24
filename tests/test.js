@@ -10,6 +10,150 @@ jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
 
+
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'Css min filter',
+exp: `
+<style>
+{{filter|cssmin}}
+a.myclass = {
+  background-color: #ff3300;
+  text-decoration: none;
+  font-weight:bold;  
+}
+{{/filter}}
+</style>
+`,
+data: data,
+eq: function(result){
+  return result.split('background-color:#f30;text-decoration:none;font-weight:700').length == 2;
+}
+});
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'Objects as filter args in set capture',
+exp: `
+<script>
+{{filter|jsmin:{toplevel:true}}}
+var foo = 'tmp';
+console.log(foo);
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/filter}}
+</script>
+`,
+data: data,
+eq: function(result){
+  return result.split('console.log("tmp"),console.log(55);').length == 2;
+}
+});
+
+
+
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'Objects as filter args in conditional',
+exp: `
+{{set js=...}}
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/set}}
+{{if (js|jsmin:{toplevel:true})=='console.log(55);'}}
+ok
+{{/if}}
+`,
+data: data,
+eq: function(result){
+  return result.split('ok').length == 2;
+}
+});
+
+
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'Objects as filter args in simple set',
+exp: `
+{{set js=...}}
+var foo = 'tmp';
+console.log(foo);
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/set}}
+{{set js=js|jsmin:{toplevel:true}}}
+<script>
+{{js}}
+</script>
+`,
+data: data,
+eq: function(result){
+  return result.split('console.log("tmp"),console.log(55);').length == 2;
+}
+});
+
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'Objects as filter args in set capture',
+exp: `
+{{set js=...|jsmin:{toplevel:true}}}
+var foo = 'tmp';
+console.log(foo);
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/set}}
+<script>
+{{js}}
+</script>
+`,
+data: data,
+eq: function(result){
+  return result.split('console.log("tmp"),console.log(55);').length == 2;
+}
+});
+
+
+var data = {options:{stripWhitespace:true}};
+runTest({
+ttl:'JS min filter, objects as filter args',
+exp: `
+{{set js=...}}
+var foo = 'tmp';
+console.log(foo);
+function fooBar(){
+  var tmp = 55;
+  return tmp
+}
+console.log(fooBar());
+{{/set}}
+<script>
+{{js|jsmin:{toplevel:true}}}
+</script>
+`,
+data: data,
+eq: function(result){
+  return result.split('console.log("tmp"),console.log(55);').length == 2;
+}
+});
+
+
+
 var data = {greeting:'hi', options:{stripWhitespace:true}};
 runTest({
 ttl:'Simple set += operation',
