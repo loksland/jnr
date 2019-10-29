@@ -197,7 +197,7 @@ console.log("tmp"),console.log(55);
 ```
 
 
-**str.jsmin**   
+**str.cssmin**   
 
 Minifies supplied css using the [clean-css](https://www.npmjs.com/package/clean-css) library.
 Accepts option object parameter (optional), documentation [here](https://www.npmjs.com/package/clean-css#formatting-options).
@@ -218,6 +218,8 @@ a.myclass = {
 a.myclass ={background-color:#f30;text-decoration:none;font-weight:700}
 </style>
 ```
+
+
 
 ### Registering custom filters 
 

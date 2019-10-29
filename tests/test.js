@@ -12,6 +12,22 @@ jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
 
+var data = {global:{list:['{{>tmp.js|jsmin}}']}};
+runTest({
+ttl:'Include with filter',
+exp: `
+{{each global.list as js}}
+GOT: {{js}}
+{{/each}}
+`,
+data: data,
+eq: function(result){
+  return result.split('console.log("HI")').length == 2;
+}
+});
+
+
+
 var data = {options:{stripWhitespace:true}};
 runTest({
 ttl:'Css min filter',

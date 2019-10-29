@@ -452,7 +452,7 @@ function renderString(str, data, options){
 	// Just like a set capture block though is outputted immediately
   var regexStr = TPL_TAG_OPEN_REGSAFE + 'filter(\\|.*?\\}?)'+TPL_TAG_CLOSE_REGSAFE+'((?:(?!'+TPL_TAG_OPEN_REGSAFE+'each)(?!'+TPL_TAG_OPEN_REGSAFE+'if)(?!'+TPL_TAG_OPEN_REGSAFE+'set)(?!'+TPL_TAG_OPEN_REGSAFE+'filter).|[\r\n])*?)'+TPL_TAG_OPEN_REGSAFE+'\/filter'+TPL_TAG_CLOSE_REGSAFE
 	var regex = new RegExp(regexStr, 'gim') 
-  
+    
 	var origStr = str;
 	var m;
 	var indexOffset=0;
@@ -1053,7 +1053,8 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
         
         // If the result has more tags to resolve then keep rendering.
         // These need to be complete before applying filters.
-        while (tagSearchRegex.test(rollingResult)){ 
+        // Check result is a string as non-string may match
+        while (typeof rollingResult === 'string' && tagSearchRegex.test(rollingResult)){ 
           rollingResult = renderString(rollingResult, data, options);
         }
         
@@ -1098,7 +1099,8 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
     var val = utils.getObjPath(data, varPath);
 		if (val != undefined){
       var valPre = val;
-      while (tagSearchRegex.test(val)){ // Any tags?
+      // Check result is a string as non-string may match
+      while (typeof val === 'string' && tagSearchRegex.test(val)){ // Any tags?
         val = renderString(val, data, options);
       }
       if (valPre != val){ // Save data for being evalulated later
@@ -1163,11 +1165,12 @@ function renderExpression(exp, data, options, resolveOptionalsToBoolean = false)
       
 		}
     
-		if (result != undefined){      
+		if (result != undefined){    
 			// Found a result, exit optional search loop
       
       // If the result has more tags to resolve then keep rendering, saves having to do another whole pass later.
-      while (tagSearchRegex.test(result)){ 
+      // Check result is a string as non-string may match
+      while (typeof result === 'string' && tagSearchRegex.test(result)){ 
         result = renderString(result, data, options);
       }
       
