@@ -10,7 +10,16 @@ jnr.registerIncludePath(path.join(__dirname,'inc2'));
 
 
 
+var data = {output:'yes', name:'Keith'};
+runTest({
+ttl:'Ternary output with conditional test',
+exp: `{{output=='yes'?'hi':''}}`,
+data: data,
+eq: 'hi'
+});
 
+
+process.exit(1);
 
 var data = {global:{list:['{{>tmp.js|jsmin}}']}};
 runTest({

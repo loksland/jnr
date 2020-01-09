@@ -424,7 +424,7 @@ Welcome
 ```
 
 ### Release history
-- v0.1.23 - Expression sub-rendering bug fix.
+- v0.1.28 - Expression sub-rendering bug fix.
 - v0.1.27 - `data.options` take precedence over `options` render param, `cssmin` filter added, docs updated.
 - v0.1.26 - `jsmin` filter, filters accept curly brace object arguments `{foo:bar}`. Docs update.
 - v0.1.25 - `+=` assignment support for set.
